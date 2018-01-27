@@ -473,35 +473,10 @@ is_blank([{{lf, _}, _} | []]) -> true;
 is_blank([{{ws, _}, _} | T])  -> is_blank(T);
 is_blank(_List)               -> false.
 
-is_block_tag("address")    -> true;
-is_block_tag("blockquote") -> true;
-is_block_tag("center")     -> true;
-is_block_tag("dir")        -> true;
-is_block_tag("div")        -> true;
-is_block_tag("dl")         -> true;
-is_block_tag("fieldset")   -> true;
-is_block_tag("form")       -> true;
-is_block_tag("h1")         -> true;
-is_block_tag("h2")         -> true;
-is_block_tag("h3")         -> true;
-is_block_tag("h4")         -> true;
-is_block_tag("h5")         -> true;
-is_block_tag("h6")         -> true;
-is_block_tag("hr")         -> true;
-is_block_tag("isindex")    -> true;
-is_block_tag("menu")       -> true;
-is_block_tag("noframes")   -> true;
-is_block_tag("noscript")   -> true;
-is_block_tag("ol")         -> true;
-is_block_tag("p")          -> true;
-is_block_tag("pre")        -> true;
-is_block_tag("table")      -> true;
-is_block_tag("thead")      -> true;
-is_block_tag("tbody")      -> true;
-is_block_tag("tr")         -> true;
-is_block_tag("td")         -> true;
-is_block_tag("ul")         -> true;
-is_block_tag(_Other)       -> false.
+is_block_tag("div")   -> true;
+is_block_tag("span")  -> true;
+is_block_tag("image") -> true;
+is_block_tag("a")     -> true.
 
 type_underscore(List) ->
     case type_underscore1(trim_right(List)) of
@@ -1004,4 +979,4 @@ interpolate3([H | T], D, Tag1, Tag2, X, Acc) ->
 %%%
 %%%-------------------------------------------------------------------
 
--include("markdown_tests.hrl").
+-include("eiderdown_tests.hrl").
