@@ -25,6 +25,12 @@
 -define(AMP, $&, $a, $m, $p, $;).
 -define(COPY, $&, $c, $o, $p, $y, $;).
 
+-record(ast, {
+          type         :: atom(),
+          padding = 0  :: integer(),
+          content = [] :: list()
+         }).
+
 %%% the lexer first lexes the input
 %%% make_lines does 2 passes:
 %%% * it chops the lexed strings into lines which it represents as a
@@ -88,23 +94,45 @@ write(File, Text) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 parse(TypedLines) ->
-    string:strip(p1(TypedLines, 0, []), both, $\n).
+    AST = p1(TypedLines, 0, []),
+    io:format("AST is ~p~n", [AST]),
+    HTML = make_html(AST, []),
+    string:strip(HTML, both, $\n).
+
+make_html([], Acc) ->
+    flatten(reverse(Acc));
+make_html([#ast{type = para, padding = _I, content = Text} | T], Acc) ->
+    HTML = "<p>" ++ Text ++ "</p>\n",
+    make_html(T, [HTML | Acc]);
+make_html([#ast{type = {heading, N}, padding = _I, content = Text} | T], Acc) ->
+    HTML = "<h" ++ integer_to_list(N) ++ ">"
+        ++ Text
+        ++ "</h" ++ integer_to_list(N) ++ ">\n",
+    make_html(T, [HTML | Acc]);
+make_html([#ast{type = _Type, padding = _I, content = Text} | T], Acc) ->
+    make_html(T, [Text | Acc]);
+make_html([Text | T], Acc) ->
+    make_html(T, [Text | Acc]).
 
 %% goes through the lines
 %% Variable 'R' contains the References and 'I' is the indent level
 
 %% Terminal clause
-p1([], _I, Acc)    -> flatten(reverse(Acc));
+p1([], _I, Acc)    -> reverse(Acc);
 
 %% Tags have the highest precedence...
 p1([{tag, Tag} | T], I, Acc) ->
     case T of
         []                -> p1([], I,
-                                ["</p>", make_tag_str(Tag), "<p>" | Acc]);
+                                [#ast{type    = tag,
+                                      content = make_tag_str(Tag)} | Acc]);
         [{blank, _} | T2] -> p1(T2, I,
-                                [make_tag_str(Tag) | Acc]);
+                                [#ast{type    = tag,
+                                      content = make_tag_str(Tag)} | Acc]);
         _Other            -> p1(T, I,
-                                [pad(I) ++ make_tag_str(Tag) | Acc])
+                                [#ast{type    = tag,
+                                      padding = I,
+                                      content = make_tag_str(Tag)} | Acc])
     end;
 
 p1([{blocktag, [{{{tag, open}, Type}, Tg}] = _Tag} | T], I, Acc) ->
@@ -127,27 +155,39 @@ p1([{normal, P1}, {normal, P2} | T], I, Acc) ->
 %% one normal is just normal...
 p1([{normal, P} | T], I, Acc) ->
     P2 = string:strip(make_str(snip(P)), both, ?SPACE),
-    p1(T, I, [pad(I) ++ "<p>" ++ P2 ++ "</p>\n" | Acc]);
+    p1(T, I, [#ast{type = para, padding = I, content = P2} | Acc]);
 
 %% atx headings
 p1([{{h1, P}, _} | T], I, Acc) ->
     NewP = string:strip(make_str(snip(P)), right),
-    p1(T, I,  [pad(I) ++ "<h1>" ++ NewP ++ "</h1>\n\n" | Acc]);
+    p1(T, I,  [#ast{type    = {heading, 1},
+                    padding = I,
+                    content = NewP} | Acc]);
 p1([{{h2, P}, _} | T], I, Acc) ->
     NewP = string:strip(make_str(snip(P)), right),
-    p1(T, I,  [pad(I) ++ "<h2>" ++ NewP ++ "</h2>\n\n" | Acc]);
+    p1(T, I,  [#ast{type    = {heading, 2},
+                    padding = I,
+                    content = NewP} | Acc]);
 p1([{{h3, P}, _} | T], I, Acc) ->
     NewP = string:strip(make_str(snip(P)), right),
-    p1(T, I,  [pad(I) ++ "<h3>" ++ NewP ++ "</h3>\n\n" | Acc]);
+    p1(T, I,  [#ast{type    = {heading, 3},
+                    padding = I,
+                    content = NewP} | Acc]);
 p1([{{h4, P}, _} | T], I, Acc) ->
     NewP = string:strip(make_str(snip(P)), right),
-    p1(T, I,  [pad(I) ++ "<h4>" ++ NewP ++ "</h4>\n\n" | Acc]);
+    p1(T, I,  [#ast{type    = {heading, 4},
+                    padding = I,
+                    content = NewP} | Acc]);
 p1([{{h5, P}, _} | T], I, Acc) ->
     NewP = string:strip(make_str(snip(P)), right),
-    p1(T, I,  [pad(I) ++ "<h5>" ++ NewP ++ "</h5>\n\n" | Acc]);
+    p1(T, I,  [#ast{type    = {heading, 5},
+                    padding = I,
+                    content = NewP} | Acc]);
 p1([{{h6, P}, _} | T], I, Acc) ->
     NewP = string:strip(make_str(snip(P)), right),
-    p1(T, I,  [pad(I) ++ "<h6>" ++ NewP ++ "</h6>\n\n" | Acc]);
+    p1(T, I,  [#ast{type    = {heading, 6},
+                    padding = I,
+                    content = NewP} | Acc]);
 
 %% unordered lists swallow normal and codeblock lines
 p1([{{ul, P1}, S1}, {{normal, P2}, S2} | T], I , Acc) ->
@@ -156,8 +196,8 @@ p1([{{ul, P1}, S1}, {{codeblock, P2}, S2} | T], I , Acc) ->
     p1([{{ul, merge(P1, pad(I), P2)}, S1 ++ S2} | T], I, Acc);
 p1([{{ul, _P}, _} | _T] = List, I, Acc) ->
     {Rest, NewAcc} = parse_list(ul, List, I, [], false),
-    p1(Rest, I,  [pad(I) ++ "<ul>\n" ++ NewAcc
-                           ++ pad(I) ++ "</ul>\n" | Acc]);
+    p1(Rest, I,  [pad(I) ++ ["<ul>\n"] ++ NewAcc
+                           ++ pad(I) ++ ["</ul>\n"] | Acc]);
 
 %% ordered lists swallow normal and codeblock lines
 p1([{{ol, P1}, S1}, {{normal, P2}, S2} | T], I , Acc) ->
@@ -166,8 +206,8 @@ p1([{{ol, P1}, S1}, {{codeblock, P2}, S2} | T], I , Acc) ->
     p1([{{ol, merge(P1, pad(I), P2)}, S1 ++ S2} | T], I, Acc);
 p1([{{ol, _P}, _} | _T] = List, I, Acc) ->
     {Rest, NewAcc} = parse_list(ol, List, I, [], false),
-    p1(Rest, I,  [pad(I) ++ "<ol>\n" ++ NewAcc
-                           ++ pad(I) ++ "</ol>\n" | Acc]);
+    p1(Rest, I,  [pad(I) ++ ["<ol>\n"] ++ NewAcc
+                           ++ pad(I) ++ ["</ol>\n"] | Acc]);
 
 %% codeblock consumes any following empty lines
 %% and other codeblocks
