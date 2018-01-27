@@ -7,7 +7,7 @@
 %%% Created : 10 Sep 2009 by gordonguthrie@backawinner.gg
 %%%-------------------------------------------------------------------
 
--module(markdown).
+-module(eiderdown).
 
 -export([conv/1,
          conv_utf8/1,
@@ -35,7 +35,7 @@
 %%% * reference style images
 %%% * special line types
 %%%   - blank
-%%%   - SETEXT header lines
+%%%   - SETEXT header lines %% KILL
 %%%   - ATX header lines
 %%%   - blockquote
 %%%   - unordered lists
@@ -44,20 +44,20 @@
 %%%   - horizontal rules
 %%% the parser then does its magic interpolating the references as appropriate
 conv(String) -> Lex = lex(String),
-                % io:format("Lex is ~p~n", [Lex]),
+                io:format("Lex is ~p~n", [Lex]),
                 UntypedLines = make_lines(Lex),
-                % io:format("UntypedLines are ~p~n", [UntypedLines]),
+                io:format("UntypedLines are ~p~n", [UntypedLines]),
                 {TypedLines, Refs} = type_lines(UntypedLines),
-                % io:format("TypedLines are ~p~nRefs is ~p~n",
-                %          [TypedLines, Refs]),
+                io:format("TypedLines are ~p~nRefs is ~p~n",
+                          [TypedLines, Refs]),
                 parse(TypedLines, Refs).
 
 -spec conv_utf8(list()) -> list().
 conv_utf8(Utf8) ->
     Str = xmerl_ucs:from_utf8(Utf8),
     Res = conv(Str),
-    xmerl_ucs:to_utf8(Res).    
-                
+    xmerl_ucs:to_utf8(Res).
+
 conv_file(FileIn, FileOut) ->
     case file:open(FileIn, [read]) of
         {ok, Device} -> Input = get_all_lines(Device,[]),
@@ -98,16 +98,16 @@ parse(TypedLines, Refs) ->
 %% Variable 'R' contains the References and 'I' is the indent level
 
 %% Terminal clause
-p1([], _R, _I, Acc)    -> flatten(reverse(Acc)); 
+p1([], _R, _I, Acc)    -> flatten(reverse(Acc));
 
 %% Tags have the highest precedence...
 p1([{tag, Tag} | T], R, I, Acc) ->
     case T of
-        []                -> p1([], R, I, 
+        []                -> p1([], R, I,
                                 ["</p>", make_tag_str(Tag, R), "<p>" | Acc]);
-        [{blank, _} | T2] -> p1(T2, R, I, 
+        [{blank, _} | T2] -> p1(T2, R, I,
                                 [make_tag_str(Tag, R) | Acc]);
-        _Other            -> p1(T, R, I, 
+        _Other            -> p1(T, R, I,
                                 [pad(I) ++ make_tag_str(Tag, R) | Acc])
     end;
 
@@ -115,45 +115,18 @@ p1([{blocktag, [{{{tag, open}, Type}, Tg}] = _Tag} | T], R, I, Acc) ->
     {Block, Rest} = grab_for_blockhtml(T, Type, []),
     Str = lists:flatten([Tg, "\n" | Block]),
     p1(Rest, R, I, [Str | Acc]);
-    
+
 %% blank lines/linefeeds are gobbled down
 p1([{Type, _} | T], R, I, Acc)
   when Type == blank orelse Type == linefeed ->
     Rest = grab_empties(T),
-    p1(Rest, R, I, [pad(I) ++ "\n" | Acc]); 
+    p1(Rest, R, I, [pad(I) ++ "\n" | Acc]);
 
 %% two consecutive normal lines should be concatenated...
 %% remembering the pad the second line with the indent...
 p1([{normal, P1}, {normal, P2} | T], R, I, Acc) ->
     p1([{normal, merge(P1, pad(I), P2)} | T], R, I, Acc);
 %% as should a normal and linefeed
-
-%% setext h1 is a look behind and it overrides blockquote and code...
-p1([{normal, P}, {setext_h1, _} | T], R, I, Acc) ->
-    p1(T, R, I,  [pad(I) ++ "<h1>" ++ make_str(snip(P), R)
-                        ++ "</h1>\n\n" | Acc]); 
-p1([{blockquote, P}, {setext_h1, _} | T], R, I, Acc) ->
-    p1(T, R, I,  [pad(I) ++ "<h1>" ++ make_str(snip(P), R)
-                        ++ "</h1>\n\n" | Acc]); 
-p1([{{codeblock, P}, _}, {setext_h1, _} | T], R, I, Acc) ->
-    p1(T, R, I,  [pad(I) ++ "<h1>" ++ make_str(snip(P), R)
-                        ++ "</h1>\n\n" | Acc]); 
-p1([{blockquote, P}, {h2_or_hr, _} | T], R, I, Acc) ->
-    p1(T, R, I,  [pad(I) ++ "<h2>" ++ make_str(snip(P), R)
-                        ++ "</h2>\n\n" | Acc]); 
-p1([{{codeblock, P}, _}, {h2_or_hr, _} | T], R, I, Acc) ->
-    p1(T, R, I,  [pad(I) ++ "<h2>" ++ make_str(snip(P), R)
-                        ++ "</h2>\n\n" | Acc]); 
-
-%% but a setext with no lookbehind is just rendered as a normal line,
-%% so change its type and rethrow it
-p1([{setext_h1, P} | T], R, I, Acc) ->
-    p1([{normal, P} | T], R, I, Acc); 
-
-%% setext h2 might be a look behind
-p1([{normal, P}, {h2_or_hr, _} | T], R, I, Acc) ->
-    P2 = string:strip(make_str(snip(P), R), both, ?SPACE),
-    p1(T, R, I, [pad(I) ++ "<h2>" ++ P2 ++ "</h2>\n\n" | Acc]); 
 
 %% blockquotes swallow each other
 %% replace the first blockquote mark with a space...
@@ -168,7 +141,7 @@ p1([{blockquote, P} | T], R, I, Acc) ->
     T2 = string:strip(make_str(T1, R)),
     p1(T, R, I,
        ["\n<blockquote>\n" ++ pad(I + 1) ++ "<p>" ++ T2 ++ "</p>\n</blockquote>" | Acc]);
-    
+
 %% one normal is just normal...
 p1([{normal, P} | T], R, I, Acc) ->
     P2 = string:strip(make_str(snip(P), R), both, ?SPACE),
@@ -177,28 +150,28 @@ p1([{normal, P} | T], R, I, Acc) ->
 %% atx headings
 p1([{{h1, P}, _} | T], R, I, Acc) ->
     NewP = string:strip(make_str(snip(P), R), right),
-    p1(T, R, I,  [pad(I) ++ "<h1>" ++ NewP ++ "</h1>\n\n" | Acc]); 
+    p1(T, R, I,  [pad(I) ++ "<h1>" ++ NewP ++ "</h1>\n\n" | Acc]);
 p1([{{h2, P}, _} | T], R, I, Acc) ->
     NewP = string:strip(make_str(snip(P), R), right),
-    p1(T, R, I,  [pad(I) ++ "<h2>" ++ NewP ++ "</h2>\n\n" | Acc]); 
+    p1(T, R, I,  [pad(I) ++ "<h2>" ++ NewP ++ "</h2>\n\n" | Acc]);
 p1([{{h3, P}, _} | T], R, I, Acc) ->
     NewP = string:strip(make_str(snip(P), R), right),
-    p1(T, R, I,  [pad(I) ++ "<h3>" ++ NewP ++ "</h3>\n\n" | Acc]); 
+    p1(T, R, I,  [pad(I) ++ "<h3>" ++ NewP ++ "</h3>\n\n" | Acc]);
 p1([{{h4, P}, _} | T], R, I, Acc) ->
     NewP = string:strip(make_str(snip(P), R), right),
-    p1(T, R, I,  [pad(I) ++ "<h4>" ++ NewP ++ "</h4>\n\n" | Acc]); 
+    p1(T, R, I,  [pad(I) ++ "<h4>" ++ NewP ++ "</h4>\n\n" | Acc]);
 p1([{{h5, P}, _} | T], R, I, Acc) ->
     NewP = string:strip(make_str(snip(P), R), right),
-    p1(T, R, I,  [pad(I) ++ "<h5>" ++ NewP ++ "</h5>\n\n" | Acc]); 
+    p1(T, R, I,  [pad(I) ++ "<h5>" ++ NewP ++ "</h5>\n\n" | Acc]);
 p1([{{h6, P}, _} | T], R, I, Acc) ->
     NewP = string:strip(make_str(snip(P), R), right),
-    p1(T, R, I,  [pad(I) ++ "<h6>" ++ NewP ++ "</h6>\n\n" | Acc]); 
+    p1(T, R, I,  [pad(I) ++ "<h6>" ++ NewP ++ "</h6>\n\n" | Acc]);
 
 %% unordered lists swallow normal and codeblock lines
 p1([{{ul, P1}, S1}, {{normal, P2}, S2} | T], R, I , Acc) ->
-    p1([{{ul, merge(P1, pad(I), P2)}, S1 ++ S2} | T], R, I, Acc);    
+    p1([{{ul, merge(P1, pad(I), P2)}, S1 ++ S2} | T], R, I, Acc);
 p1([{{ul, P1}, S1}, {{codeblock, P2}, S2} | T], R, I , Acc) ->
-    p1([{{ul, merge(P1, pad(I), P2)}, S1 ++ S2} | T], R, I, Acc);    
+    p1([{{ul, merge(P1, pad(I), P2)}, S1 ++ S2} | T], R, I, Acc);
 p1([{{ul, _P}, _} | _T] = List, R, I, Acc) ->
     {Rest, NewAcc} = parse_list(ul, List, R, I, [], false),
     p1(Rest, R, I,  [pad(I) ++ "<ul>\n" ++ NewAcc
@@ -206,9 +179,9 @@ p1([{{ul, _P}, _} | _T] = List, R, I, Acc) ->
 
 %% ordered lists swallow normal and codeblock lines
 p1([{{ol, P1}, S1}, {{normal, P2}, S2} | T], R, I , Acc) ->
-    p1([{{ol, merge(P1, pad(I), P2)}, S1 ++ S2} | T], R, I, Acc);    
+    p1([{{ol, merge(P1, pad(I), P2)}, S1 ++ S2} | T], R, I, Acc);
 p1([{{ol, P1}, S1}, {{codeblock, P2}, S2} | T], R, I , Acc) ->
-    p1([{{ol, merge(P1, pad(I), P2)}, S1 ++ S2} | T], R, I, Acc);    
+    p1([{{ol, merge(P1, pad(I), P2)}, S1 ++ S2} | T], R, I, Acc);
 p1([{{ol, _P}, _} | _T] = List, R, I, Acc) ->
     {Rest, NewAcc} = parse_list(ol, List, R, I, [], false),
     p1(Rest, R, I,  [pad(I) ++ "<ol>\n" ++ NewAcc
@@ -221,22 +194,7 @@ p1([{{codeblock, P1}, S1}, {{codeblock, P2}, S2} | T], R, I, Acc) ->
 p1([{{codeblock, P}, _} | T], R, I, Acc) ->
     Rest = grab_empties(T),
     p1(Rest, R, I,  ["<pre><code>" ++ make_str(snip(P), R)
-                     ++ "\n</code></pre>\n\n" | Acc]);
-
-%% horizontal rules
-p1([{hr, _} | T], R, I, Acc) ->
-    p1(T, R, I,  ["<hr />" | Acc]);
-%% h2_or_hr is greedy for normal lines
-p1([{h2_or_hr, P1}, {normal, P2} | T], R, I, Acc) ->
-    p1([{normal, flatten([P1 | P2])} | T], R, I, Acc);
-%% the clause with a normal before an 'h2_or_hr' has already been
-%% handled further up the tree, so this is a bona fide 'hr'...
-p1([{h2_or_hr, _} | T], R, I, Acc) ->
-    p1(T, R, I,  ["<hr />" | Acc]); 
-
-%% Now start pulling out inline refs etc, etc
-p1([{inlineref, _P} | T], R, I, Acc) ->
-    p1(T, R, I, Acc).
+                     ++ "\n</code></pre>\n\n" | Acc]).
 
 grab_for_blockhtml([], Type, Acc) ->
     {lists:reverse(["</" ++ Type ++ ">" | Acc]), []};
@@ -274,7 +232,7 @@ make_br1(List)                  -> reverse(List).
 pad(N) -> pad1(N, []).
 
 pad1(0, Acc)            -> Acc;
-pad1(N, Acc) when N > 0 -> pad1(N - 1, ["  " | Acc]). 
+pad1(N, Acc) when N > 0 -> pad1(N - 1, ["  " | Acc]).
 
 %% this is a bit messy because of the way that hard lines are treated...
 %% If your li's have a blank line between them the item gets wrapped in a para,
@@ -291,7 +249,7 @@ parse_list(Type, [{{Type, P}, _} | T], R, I, A, Wrap) ->
                       Ret3 = string:right(Ret2, length(Ret2) -3),
                       Ret3 ++ "\n" ++ NewP ++ pad(I);
              true  -> string:strip(parse([{normal, P}], R), right, ?LF)
-                          ++ NewP ++ pad(I) 
+                          ++ NewP ++ pad(I)
          end,
     NewWrap2 = case T of
                    []         -> false; % doesnt matter
@@ -318,7 +276,7 @@ grab([{{codeblock, _}, S} | T] = List, R, Acc, W) ->
                                         make_esc_str(R1, R),
                                         "<blockquote>" | Acc], W);
         {{esc_false, R1}, _T2} -> {R1, reverse(Acc), false};
-        {false, T2}            -> 
+        {false, T2}            ->
             case is_double_indent(S) of
                 false      ->
                     {List, reverse(Acc), false};
@@ -340,7 +298,7 @@ grab([{normal, P} | T], R, Acc, W) ->
      Li = case W of
               false -> make_esc_str(P, R);
               true  -> "<p>"++ string:strip(make_esc_str(P, R), right, ?LF)
-                           ++ "</p>" 
+                           ++ "</p>"
           end,
      grab(T, R, [Li | Acc], W);
 grab(List, _R, Acc, W) ->
@@ -428,7 +386,6 @@ ml2(H, List) -> reverse([H | List]).
 %%% * reference style images
 %%% * special line types
 %%%   - blank
-%%%   - SETEXT header lines
 %%%   - ATX header lines
 %%%   - unordered lists (including code blocks)
 %%%   - ordered lists (including code blocks)
@@ -443,34 +400,6 @@ type_lines(Lines) ->
     {strip_lines(TypedLines), Refs}.
 
 t_l1([], A1, A2) -> {A1, reverse(A2)};
-%% this clause extracts URL and Image refs
-%% (it is the only one that uses A1 and A2...
-%% inlines can have up to 3 spaces before it
-t_l1([[{{ws, sp}, _},
-       {{inline, open}, _} | T1] = H | T2], A1, A2) ->
-    t_inline(H, T1, T2, A1, A2);
-t_l1([[{{ws, tab}, _},
-       {{inline, open}, _} | T1] = H | T2], A1, A2) ->
-    t_inline(H, T1, T2, A1, A2);
-t_l1([[{{ws, comp}, W},
-       {{inline, open}, _} | T1] = H | T2], A1, A2) ->
-    case gt(W, 3) of
-        {true, _R} -> t_inline(H, T1, T2, A1, A2);
-        false      -> t_l1(T1, A1, [{normal , H} | A2]) % same exit at the final clause!
-    end,
-    t_inline(H, T1, T2, A1, A2);
-t_l1([[{{inline, open}, _} | T1] = H | T2], A1, A2) ->
-    t_inline(H, T1, T2, A1, A2);
-
-%% types setext lines
-t_l1([[{{md, eq}, _} | _T] = H | T], A1, A2) ->
-    t_l1(T, A1, [type_setext_h1(H) | A2]);
-%% NOTE 1: generates a ul as the default not a normal line
-%% NOTE 2: depending on the context this might generate an <h2> header
-%%         or an <hr />
-%% NOTE 3: space - is typed to a bullet down in <ul> land...
-t_l1([[{{md, dash}, _} | _T] = H | T], A1, A2) ->
-    t_l1(T, A1, [type_setext_h2(H) | A2]);
 
 %% types atx lines
 t_l1([[{{md, atx}, _} | _T] = H | T], A1, A2) ->
@@ -488,23 +417,11 @@ t_l1([[{{md, gt}, _} | _T1] = H | T], A1, A2) ->
     t_l1(T, A1, [{blockquote, H} | A2]);
 
 %% types unordered lists lines
-%% NOTE 1: the dashed version is generated in type_setext_h2
-%% NOTE 2: the asterix version also might generate a horizontal rule
-%%         which is why it jumps to type_star2 <-- note the 2!!
 t_l1([[{{ws, _}, _}, {{md, star}, _} = ST1,
        {{ws, _}, _} = WS1 | T1] = H | T], A1, A2) ->
     t_l1(T, A1, [{type_star2([ST1, WS1 | T1]), H} | A2]);
 t_l1([[{{md, star}, _}, {{ws, _}, _} | _T1] = H | T], A1, A2) ->
     t_l1(T, A1, [{type_star2(H), H} | A2]);
-t_l1([[{{ws, _}, _}, {{md, plus}, _},
-       {{ws, _}, _} = W | T1] = H | T], A1, A2) ->
-    t_l1(T, A1, [{{ul, make_list_str([W | T1])}, H} | A2]);
-t_l1([[{{md, plus}, _}, {{ws, _}, _} = W | T1] = H | T], A1, A2) ->
-    t_l1(T, A1, [{{ul, make_list_str([W | T1])}, H} | A2]);
-%% UL based on dashes
-t_l1([[{{ws, _}, _}, {{md, dash}, _},
-       {{ws, _}, _} = W | T1] = H | T], A1, A2) ->
-    t_l1(T, A1, [{{ul, make_list_str([W | T1])}, H} | A2]);
 
 %% types ordered lists...
 t_l1([[{{ws, _}, _}, {num, _} = N1| T1] | T], A1, A2) ->
@@ -539,13 +456,6 @@ t_l1([[{{ws, _}, _} | _T1] = H | T], A1, A2) ->
 %% Final clause...
 t_l1([H | T], A1, A2) ->
     t_l1(T, A1, [{normal , H} | A2]).
-
-t_inline(H, T1, T2, A1, A2) ->
-    case snip_ref(T1) of
-        {Type, {Id, {Url, Title}}} -> t_l1(T2, flatten([{Id, {Url, Title}} | A1]),
-                                           [{Type, H} | A2]);
-        normal                     -> t_l1(T2, A1, [{normal, H} | A2])
-    end.
 
 %% strips blanks from the beginning and end
 strip_lines(List) -> reverse(strip_l1(reverse(strip_l1(List)))).
@@ -648,7 +558,6 @@ type_ol(List) ->
         {esc_normal, Str} -> {normal, Str}
     end.
 
-
 %% this line terminates on an escaped fullstop after a number
 %% (but you need to drop the bslash...)
 type_ol1([{num, _} = N,
@@ -679,7 +588,7 @@ type_atx(List) ->
             true  ->
                 if
                     Sz == 1 ->
-                        normal; 
+                        normal;
                     ((Sz > 1) andalso (Sz < 6)) ->
                         Ns = integer_to_list(Sz - 1),
                         Hn = list_to_atom("h" ++ Ns),
@@ -718,34 +627,6 @@ strip_atx(List) -> reverse(s_atx1(reverse(List))).
 s_atx1([{{lf, _}, _}, {{md, atx}, _} | T]) -> s_atx1(T);
 s_atx1([{{md, atx}, _} | T])               -> s_atx1(T);
 s_atx1(List)                               -> List.
-
-type_setext_h1(List) -> type_s_h1_1(List, []).
-
-%% terminates on running out or new line
-type_s_h1_1([{{lf, _}, _} = L | []], Acc) -> {setext_h1, reverse([L | Acc])};
-type_s_h1_1([], Acc)                      -> {setext_h1, reverse(Acc)};
-type_s_h1_1([[] | T], Acc)                -> type_s_h1_1(T, Acc);
-type_s_h1_1([{{md, eq}, _} = H | T], Acc) -> type_s_h1_1(T, [H | Acc]);
-type_s_h1_1(L, Acc)                       ->  {normal, flatten([Acc | L])}.
-
-type_setext_h2(List) ->
-    case type_s_h2_1(List) of
-        h2_or_hr -> {h2_or_hr, List};
-        not_h2   -> {type_s_h2_2(trim_right(List)), List}
-    end.                            
-%% terminates on running out or new line
-type_s_h2_1([{{lf, _}, _} | []])   -> h2_or_hr;
-type_s_h2_1([])                    -> h2_or_hr;
-type_s_h2_1([[] | T])              -> type_s_h2_1(T);
-type_s_h2_1([{{md, dash}, _} | T]) -> type_s_h2_1(T);
-type_s_h2_1(_L)                    -> not_h2.
-
-type_s_h2_2([{{md, dash}, _}, {{ws,_}, _},
-             {{md, dash}, _}, {{ws, _}, _},
-             {{md, dash}, _}])              -> hr;
-type_s_h2_2([{{md, dash}, _},
-             {{ws, _}, _} = WS | T])        -> {ul, make_list_str([WS | T])};
-type_s_h2_2(_List)                          -> normal.
 
 type_ws(List) ->
     case type_ws1(List) of
@@ -796,7 +677,7 @@ esc_tag(String) -> esc_t1(String, []).
 esc_t1([], Acc)          -> lists:reverse(Acc);
 esc_t1([?NBSP | T], Acc) -> esc_t1(T, [?SPACE | Acc]); % non-breaking space to space
 esc_t1([H | T], Acc)     -> esc_t1(T, [H | Acc]).
-                  
+
 %% if it is a list we need to discard the initial white space...
 make_list_str([{{ws, _}, _} | T] = List) ->
     case is_double_indent(List) of
@@ -804,72 +685,6 @@ make_list_str([{{ws, _}, _} | T] = List) ->
         {true, R} -> flatten([{tags, "<pre><code>"} ,R ,
                               {tags, "</code></pre>\n\n"} | []])
     end.
-
-%% All ref processing can ignore the original values 'cos those
-%% have already been captured at a higher level
-snip_ref(List) ->
-    case get_id(List) of
-        {[{_, Id}], Rest} -> {_Rest2, Ref, Title} = parse_inline(Rest),
-                             Ref2 = trim(Ref),
-                             Rs = htmlencode(make_plain_str(Ref2)),
-                             Ts = make_plain_str(Title),
-                             {inlineref, {Id, {Rs, Ts}}};
-        normal            -> normal
-    end.
-
-get_id(List) -> g_id1(List, []).
-
-g_id1([], _Acc)                         -> normal;
-g_id1([{{inline, close}, _},
-       {{punc, colon}, _}, {{ws, _}, _}
-       | T], Acc)                       -> {reverse(Acc), T};
-g_id1([H | T], Acc)                     -> g_id1(T, [H | Acc]).
-
-parse_inline(List) -> p_in1(List, []).
-
-%% snip off the terminal linefeed (if there is one...)
-p_in1([{{lf, _}, _} | []], A)            -> {[], reverse(A), []}; 
-p_in1([], A)                             -> {[], reverse(A), []}; 
-%% brackets can be escaped
-p_in1([{{punc, bslash}, _},
-       {bra, _} = B | T], A)             -> p_in1(T, [B | A]);
-p_in1([{{punc, bslash}, _},
-       {ket, _} = B | T], A)             -> p_in1(T, [B | A]);
-p_in1([{{punc, bslash}, _},
-       {{punc, doubleq}, _} = Q | T], A) -> p_in1(T, [Q | A]);
-p_in1([{{punc, bslash}, _},
-       {{punc, singleq}, _} = Q | T], A) -> p_in1(T, [Q | A]);
-%% these clauses capture the start of the title...
-p_in1([{{punc, doubleq}, _} | T], A)     -> p_in2(T, reverse(A), doubleq, []);
-p_in1([{{punc, singleq}, _} | T], A)     -> p_in2(T, reverse(A), singleq, []);
-p_in1([{bra, _} | T], A)            -> p_in2(T, reverse(A), brackets, []);
-p_in1([{ket, _} | T], A)                 -> {T, reverse(A), []};
-p_in1([H | T], A)                        -> p_in1(T, [H | A]).
-
-%% this gets titles in single and double quotes
-%% the delimiter type is passed in as 'D'
-p_in2([], Url, _D, A)                              -> {[], Url, flatten(reverse(A))};
-%% brackets can be escaped
-p_in2([{{punc, bslash}, _},
-       {bra, _} = B | T], Url, D, A)               -> p_in2(T, Url, D, [B | A]);
-p_in2([{{punc, bslash}, _},
-       {ket, _} = B | T], Url, D, A)               -> p_in2(T, Url, D, [B | A]);
-%% quotes can be escaped
-p_in2([{{punc, bslash}, _},
-       {{punc, doubleq}, _}= Q | T], Url, D, A)    -> p_in2(T, Url, D, [Q | A]);
-p_in2([{{punc, bslash}, _},
-       {{punc, singleq}, _} = Q | T], Url, D, A)   -> p_in2(T, Url, D, [Q | A]);
-%% these clauses capture the end of the title and drop the delimiter...
-p_in2([{{punc, doubleq}, _} | T], Url, doubleq, A) -> p_in2(T, Url, none, A);
-p_in2([{{punc, singleq}, _} | T], Url, singleq, A) -> p_in2(T, Url, none, A);
-p_in2([{ket, _} | T], Url, brackets, A)            -> p_in2(T, Url, none, A);
-%% terminator clause
-p_in2([{ket, _} | T], Url, none, A)                -> {T, Url, flatten(reverse(A))};
-%% this clause silently discards stuff after the delimiter...
-p_in2([_H | T], Url, none, A)                      -> p_in2(T, Url, none, [A]);
-p_in2([H | T], Url, D, A)                          -> p_in2(T, Url, D, [H | A]).
-
-trim(String) -> trim_left(trim_right(String)).
 
 trim_right(String) -> reverse(trim_left(reverse(String))).
 
@@ -904,7 +719,7 @@ lex(String) -> merge_ws(l1(String, [], [])).
 
 merge_ws(List) -> m_ws1(List, []).
 
-m_ws1([], Acc) -> reverse(Acc);                  
+m_ws1([], Acc) -> reverse(Acc);
 m_ws1([{{ws, _}, W1}, {{ws, _}, W2} | T], Acc) ->
     m_ws1([{{ws, comp}, W1 ++ W2} | T], Acc);
 m_ws1([H | T], Acc) -> m_ws1(T, [H | Acc]).
@@ -976,7 +791,7 @@ openingdiv(String) ->
 
 % dumps out a list if it is not an opening div
 openingdiv1([], Acc)         -> {flatten([{{punc, bra}, "<"}
-                                          | lex(reverse(Acc))]), []};  
+                                          | lex(reverse(Acc))]), []};
 openingdiv1([$/,$>| T], Acc) -> Acc2 = flatten(reverse(Acc)),
                                 Acc3 = string:to_lower(Acc2),
                                 [Tag | _T] = string:tokens(Acc3, " "),
@@ -995,7 +810,7 @@ openingdiv1([H|T], Acc)      -> openingdiv1(T, [H | Acc]).
 % dumps out a list if it is not an closing div
 closingdiv([], Acc)     -> {flatten([{{punc, bra}, "<"},
                                      {{punc, fslash}, "/"}
-                                     | lex(reverse(Acc))]), []};  
+                                     | lex(reverse(Acc))]), []};
 closingdiv([$>| T], Acc) -> Acc2 = flatten(reverse(Acc)),
                             Acc3 = string:to_lower(Acc2),
                             [Tag | _T] = string:tokens(Acc3, " "),
@@ -1051,40 +866,12 @@ m_esc([], _R, A)               -> flatten(reverse(A));
 m_esc([{tags, Tag} | T], R, A) -> m_esc(T, R, [{tags, Tag} | A]);
 m_esc([H | T], R, A)           -> m_esc(T, R, [make_str([H], R) | A]).
 
-    
+
 make_str(List, Refs) -> m_str1(List, Refs, []).
 
 m_str1([], _R, A) ->
     Flat = flatten(reverse(A)),
     htmlchars(Flat);
-m_str1([{{punc, bang}, B}, {{inline, open}, O} | T], R, A) ->
-    case get_inline(T, R, [], img) of
-        {Rest, {Url, Title, Acc}} -> Tag = [make_img_tag(Url, Acc, Title)],
-                                     m_str1(Rest, R, [Tag | A]);
-        {Rest, Tag}               -> m_str1(Rest, R, [Tag, O, B | A])
-    end;
-%% escape inline open's...
-m_str1([{{punc, bslash}, _}, {{inline, open}, O} | T], R, A) ->
-    m_str1(T, R, [O | A]);
-m_str1([{{inline, open}, O} | T], R, A) ->
-    case get_inline(T, R, [], url) of
-        {Rest, {Url, Title, Acc}} ->
-            Tit = case Title of
-                      [] -> [];
-                      _  -> " title=\"" ++ Title ++ "\""
-                  end,
-            Tag = [{tags, "<a href=\"" ++ Url ++ "\""
-                    ++ Tit ++ ">"}, Acc,
-                   {tags, "</a>"} | []],
-            m_str1(Rest, R, [Tag | A]);
-        {Rest, Tag} ->
-            m_str1(Rest, R, [Tag, O | A])
-    end;
-m_str1([{email, Addie} | T], R, A) ->
-    m_str1(T, R, [{tags, "\" />"}, Addie, {tags, "<a href=\"mailto:"}| A]);
-m_str1([{url, Url} | T], R, A) ->
-    m_str1(T, R, [ {tags, "</a>"}, Url, {tags, "\">"}, Url,
-                   {tags, "<a href=\""} | A]);
 m_str1([{tags, _} = Tag | T], R, A) ->
     m_str1(T, R, [Tag | A]);
 m_str1([{{{tag, Type}, Tag}, _} | T], R, A) ->
@@ -1098,80 +885,21 @@ m_str1([{{{tag, Type}, Tag}, _} | T], R, A) ->
 m_str1([{_, Orig} | T], R, A)  ->
     m_str1(T, R, [Orig | A]).
 
-% if the inline doesn't terminate its not an inline...
-get_inline([], _R, A, _) ->
-    {[], make_plain_str(reverse(A))};
-% a url can contain an image inline
-get_inline([{{punc, bang}, _B}, {{inline, open}, _O} | T], R, A, url) ->
-    {Rest, {Url, Title, Acc}} = get_inline(T, R, A, img),
-    Tag = make_img_tag(Url, Acc, Title),
-    % We double tag the tag so that it can get through the flatteners..
-    get_inline(Rest, R, [{tags, Tag} | A], url);
-get_inline([{{inline, close}, _}, {bra, _} | T], _R, A, _) ->
-    {Rest, Url, Title} = parse_inline(T),
-    Tag = {string:strip(make_plain_str(Url)),
-           make_plain_str(Title),
-           make_plain_str(reverse(A))},
-    {Rest, Tag};
-%% for img's but not url's you need to allow a single space between them
-%% to be compatible with showdown :(
-get_inline([{{inline, close}, _}, {{ws, sp}, _}, {bra, _} | T], _R, A, img) ->
-    {Rest, Url, Title} = parse_inline(T),
-    Tag = {string:strip(make_plain_str(Url)),
-           make_plain_str(Title),
-           make_plain_str(reverse(A))},
-    {Rest, Tag};
-%% this clause detects references to images/links...
-get_inline([{{inline, close}, _}, {{inline, open}, _} | T], R, A, _) ->
-    Text = make_plain_str(reverse(A)),
-    case get_id_diff(T) of
-        normal            -> {[], make_plain_str(reverse(A))};
-        {[{_, Id}], Rest} ->
-            {Url, Title} = case lists:keyfind(Id, 1, R) of
-                               false          -> {"", ""};
-                               {Id, {U, Tit}} -> {U, Tit}
-                           end,
-            Tag = {Url, Title, Text},
-            {Rest, Tag};
-        _Other -> {[], make_plain_str(reverse(A))} % random failing id's
-    end;
-%% so does this one - just delete the space and rethrow it
-get_inline([{{inline, close}, _} = C , {{ws, _}, _},
-            {{inline, open}, _} = O | T], R, A, Type) ->
-    get_inline([C, O | T], R, A, Type);
-%% this is the markdown extension clause that takes an id in square brackets without
-%% any additional stuff as a valid id marker
-get_inline([{{inline, close}, _} | T], R, A, _) ->
-    Id = make_plain_str(reverse(A)),
-    case lists:keyfind(Id, 1, R) of
-                       false              -> {T, flatten([Id , $]])};
-                       {Id, {Url, Title}} -> Tag = {Url, Title, Id},
-                                             {T, Tag}
-          end;
-get_inline([H | T], R, A, Type) ->
-    get_inline(T, R, [H | A], Type).
-
-get_id_diff(List) -> g_id_diff1(List, []).
-
-g_id_diff1([], _Acc)                         -> normal;
-g_id_diff1([{{inline, close}, _}| T], Acc)   -> {reverse(Acc), T};
-g_id_diff1([H | T], Acc)                     -> g_id_diff1(T, [H | Acc]).
-
 %% convert ascii into html characters
-htmlencode(List) ->
-    htmlencode(List, []).
- 
-htmlencode([], Acc) ->
-    lists:flatten(lists:reverse(Acc));
- 
-htmlencode([$&   | Rest], Acc) -> htmlencode(Rest, ["&amp;" | Acc]);
-htmlencode([$<   | Rest], Acc) -> htmlencode(Rest, ["&lt;" | Acc]);
-htmlencode([$>   | Rest], Acc) -> htmlencode(Rest, ["&gt;" | Acc]);
-htmlencode([160  | Rest], Acc) -> htmlencode(Rest, ["&nbsp;" | Acc]);
-htmlencode([Else | Rest], Acc) -> htmlencode(Rest, [Else | Acc]).
+%% htmlencode(List) ->
+%%     htmlencode(List, []).
+
+%% htmlencode([], Acc) ->
+%%     lists:flatten(lists:reverse(Acc));
+
+%% htmlencode([$&   | Rest], Acc) -> htmlencode(Rest, ["&amp;" | Acc]);
+%% htmlencode([$<   | Rest], Acc) -> htmlencode(Rest, ["&lt;" | Acc]);
+%% htmlencode([$>   | Rest], Acc) -> htmlencode(Rest, ["&gt;" | Acc]);
+%% htmlencode([160  | Rest], Acc) -> htmlencode(Rest, ["&nbsp;" | Acc]);
+%% htmlencode([Else | Rest], Acc) -> htmlencode(Rest, [Else | Acc]).
 
 htmlchars(List) -> htmlchars1(List, []).
- 
+
 htmlchars1([], Acc) -> flatten(reverse(Acc));
 %% tags are just wheeched out unescaped
 htmlchars1([{tags, Tag} | T], Acc)   -> htmlchars1(T, [Tag | Acc]);
@@ -1197,7 +925,7 @@ htmlchars1([$* | T], A)              -> {T2, NewA} = emphasis(T, $*),
                                         htmlchars1(T2, [NewA | A]);
 %% and again for underscores
 htmlchars1([$\\, $_, $_, $_ | T], A) -> htmlchars1(T, [$_, $_, $_ | A]);
-%% the none atom is the non-space filling whitespace 
+%% the none atom is the non-space filling whitespace
 htmlchars1([$_, $_, $_ | T], A)      -> {T2, NewA} = superstrong(T, $_),
                                         htmlchars1(T2, [NewA | A]);
 % and strong
@@ -1211,7 +939,7 @@ htmlchars1([$_ | T], A)              -> {T2, NewA} = emphasis(T, $_),
                                         htmlchars1(T2, [NewA | A]);
 %% handle backtick escaping
 htmlchars1([$\\, $` | T], A)         -> htmlchars1(T, [$` | A]);
-htmlchars1([$`, $` | T], A)          -> {T2, NewA} = dblcode(T),  
+htmlchars1([$`, $` | T], A)          -> {T2, NewA} = dblcode(T),
                                         htmlchars1(T2, [NewA | A]);
 htmlchars1([$` | T], A)              -> {T2, NewA} = code(T),
                                         htmlchars1(T2, [NewA | A]);
@@ -1269,12 +997,6 @@ interpolate3([D, D, D | T], D, Tag1, Tag2, _X, Acc) ->
      ++ "</" ++ Tag1 ++ ">"};
 interpolate3([H | T], D, Tag1, Tag2, X, Acc) ->
     interpolate3(T, D, Tag1, Tag2, X, [H | Acc]).
-
-make_img_tag(Url, Acc, Title) ->
-    {tags, "<img src=\"" ++ Url ++ "\""
-      ++ " alt=\"" ++ Acc ++ "\""
-      ++ " title=\"" ++ Title ++ "\""
-      ++ " />"}.
 
 %%%-------------------------------------------------------------------
 %%%
