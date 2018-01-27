@@ -44,10 +44,9 @@ conv(String) -> Lex = lex(String),
                 io:format("Lex is ~p~n", [Lex]),
                 UntypedLines = make_lines(Lex),
                 io:format("UntypedLines are ~p~n", [UntypedLines]),
-                {TypedLines, Refs} = type_lines(UntypedLines),
-                io:format("TypedLines are ~p~nRefs is ~p~n",
-                          [TypedLines, Refs]),
-                parse(TypedLines, Refs).
+                TypedLines = type_lines(UntypedLines),
+                io:format("TypedLines are ~p~n", [TypedLines]),
+                parse(TypedLines).
 
 -spec conv_utf8(list()) -> list().
 conv_utf8(Utf8) ->
@@ -88,97 +87,95 @@ write(File, Text) ->
 %%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-parse(TypedLines, Refs) ->
-    string:strip(p1(TypedLines, Refs, 0, []), both, $\n).
+parse(TypedLines) ->
+    string:strip(p1(TypedLines, 0, []), both, $\n).
 
 %% goes through the lines
 %% Variable 'R' contains the References and 'I' is the indent level
 
 %% Terminal clause
-p1([], _R, _I, Acc)    -> flatten(reverse(Acc));
+p1([], _I, Acc)    -> flatten(reverse(Acc));
 
 %% Tags have the highest precedence...
-p1([{tag, Tag} | T], R, I, Acc) ->
-    io:format("in p1 tag for ~p~n", [Tag]),
+p1([{tag, Tag} | T], I, Acc) ->
     case T of
-        []                -> p1([], R, I,
-                                ["</p>", make_tag_str(Tag, R), "<p>" | Acc]);
-        [{blank, _} | T2] -> p1(T2, R, I,
-                                [make_tag_str(Tag, R) | Acc]);
-        _Other            -> p1(T, R, I,
-                                [pad(I) ++ make_tag_str(Tag, R) | Acc])
+        []                -> p1([], I,
+                                ["</p>", make_tag_str(Tag), "<p>" | Acc]);
+        [{blank, _} | T2] -> p1(T2, I,
+                                [make_tag_str(Tag) | Acc]);
+        _Other            -> p1(T, I,
+                                [pad(I) ++ make_tag_str(Tag) | Acc])
     end;
 
-p1([{blocktag, [{{{tag, open}, Type}, Tg}] = _Tag} | T], R, I, Acc) ->
-    io:format("in p1 tag for blocktag for ~p : ~p~n", [Type, Tg]),
+p1([{blocktag, [{{{tag, open}, Type}, Tg}] = _Tag} | T], I, Acc) ->
     {Block, Rest} = grab_for_blockhtml(T, Type, []),
     Str = lists:flatten([Tg, "\n" | Block]),
-    p1(Rest, R, I, [Str | Acc]);
+    p1(Rest, I, [Str | Acc]);
 
 %% blank lines/linefeeds are gobbled down
-p1([{Type, _} | T], R, I, Acc)
+p1([{Type, _} | T], I, Acc)
   when Type == blank orelse Type == linefeed ->
     Rest = grab_empties(T),
-    p1(Rest, R, I, [pad(I) ++ "\n" | Acc]);
+    p1(Rest, I, [pad(I) ++ "\n" | Acc]);
 
 %% two consecutive normal lines should be concatenated...
 %% remembering the pad the second line with the indent...
-p1([{normal, P1}, {normal, P2} | T], R, I, Acc) ->
-    p1([{normal, merge(P1, pad(I), P2)} | T], R, I, Acc);
+p1([{normal, P1}, {normal, P2} | T], I, Acc) ->
+    p1([{normal, merge(P1, pad(I), P2)} | T], I, Acc);
 %% as should a normal and linefeed
 
 %% one normal is just normal...
-p1([{normal, P} | T], R, I, Acc) ->
-    P2 = string:strip(make_str(snip(P), R), both, ?SPACE),
-    p1(T, R, I, [pad(I) ++ "<p>" ++ P2 ++ "</p>\n" | Acc]);
+p1([{normal, P} | T], I, Acc) ->
+    P2 = string:strip(make_str(snip(P)), both, ?SPACE),
+    p1(T, I, [pad(I) ++ "<p>" ++ P2 ++ "</p>\n" | Acc]);
 
 %% atx headings
-p1([{{h1, P}, _} | T], R, I, Acc) ->
-    NewP = string:strip(make_str(snip(P), R), right),
-    p1(T, R, I,  [pad(I) ++ "<h1>" ++ NewP ++ "</h1>\n\n" | Acc]);
-p1([{{h2, P}, _} | T], R, I, Acc) ->
-    NewP = string:strip(make_str(snip(P), R), right),
-    p1(T, R, I,  [pad(I) ++ "<h2>" ++ NewP ++ "</h2>\n\n" | Acc]);
-p1([{{h3, P}, _} | T], R, I, Acc) ->
-    NewP = string:strip(make_str(snip(P), R), right),
-    p1(T, R, I,  [pad(I) ++ "<h3>" ++ NewP ++ "</h3>\n\n" | Acc]);
-p1([{{h4, P}, _} | T], R, I, Acc) ->
-    NewP = string:strip(make_str(snip(P), R), right),
-    p1(T, R, I,  [pad(I) ++ "<h4>" ++ NewP ++ "</h4>\n\n" | Acc]);
-p1([{{h5, P}, _} | T], R, I, Acc) ->
-    NewP = string:strip(make_str(snip(P), R), right),
-    p1(T, R, I,  [pad(I) ++ "<h5>" ++ NewP ++ "</h5>\n\n" | Acc]);
-p1([{{h6, P}, _} | T], R, I, Acc) ->
-    NewP = string:strip(make_str(snip(P), R), right),
-    p1(T, R, I,  [pad(I) ++ "<h6>" ++ NewP ++ "</h6>\n\n" | Acc]);
+p1([{{h1, P}, _} | T], I, Acc) ->
+    NewP = string:strip(make_str(snip(P)), right),
+    p1(T, I,  [pad(I) ++ "<h1>" ++ NewP ++ "</h1>\n\n" | Acc]);
+p1([{{h2, P}, _} | T], I, Acc) ->
+    NewP = string:strip(make_str(snip(P)), right),
+    p1(T, I,  [pad(I) ++ "<h2>" ++ NewP ++ "</h2>\n\n" | Acc]);
+p1([{{h3, P}, _} | T], I, Acc) ->
+    NewP = string:strip(make_str(snip(P)), right),
+    p1(T, I,  [pad(I) ++ "<h3>" ++ NewP ++ "</h3>\n\n" | Acc]);
+p1([{{h4, P}, _} | T], I, Acc) ->
+    NewP = string:strip(make_str(snip(P)), right),
+    p1(T, I,  [pad(I) ++ "<h4>" ++ NewP ++ "</h4>\n\n" | Acc]);
+p1([{{h5, P}, _} | T], I, Acc) ->
+    NewP = string:strip(make_str(snip(P)), right),
+    p1(T, I,  [pad(I) ++ "<h5>" ++ NewP ++ "</h5>\n\n" | Acc]);
+p1([{{h6, P}, _} | T], I, Acc) ->
+    NewP = string:strip(make_str(snip(P)), right),
+    p1(T, I,  [pad(I) ++ "<h6>" ++ NewP ++ "</h6>\n\n" | Acc]);
 
 %% unordered lists swallow normal and codeblock lines
-p1([{{ul, P1}, S1}, {{normal, P2}, S2} | T], R, I , Acc) ->
-    p1([{{ul, merge(P1, pad(I), P2)}, S1 ++ S2} | T], R, I, Acc);
-p1([{{ul, P1}, S1}, {{codeblock, P2}, S2} | T], R, I , Acc) ->
-    p1([{{ul, merge(P1, pad(I), P2)}, S1 ++ S2} | T], R, I, Acc);
-p1([{{ul, _P}, _} | _T] = List, R, I, Acc) ->
-    {Rest, NewAcc} = parse_list(ul, List, R, I, [], false),
-    p1(Rest, R, I,  [pad(I) ++ "<ul>\n" ++ NewAcc
+p1([{{ul, P1}, S1}, {{normal, P2}, S2} | T], I , Acc) ->
+    p1([{{ul, merge(P1, pad(I), P2)}, S1 ++ S2} | T], I, Acc);
+p1([{{ul, P1}, S1}, {{codeblock, P2}, S2} | T], I , Acc) ->
+    p1([{{ul, merge(P1, pad(I), P2)}, S1 ++ S2} | T], I, Acc);
+p1([{{ul, _P}, _} | _T] = List, I, Acc) ->
+    {Rest, NewAcc} = parse_list(ul, List, I, [], false),
+    p1(Rest, I,  [pad(I) ++ "<ul>\n" ++ NewAcc
                            ++ pad(I) ++ "</ul>\n" | Acc]);
 
 %% ordered lists swallow normal and codeblock lines
-p1([{{ol, P1}, S1}, {{normal, P2}, S2} | T], R, I , Acc) ->
-    p1([{{ol, merge(P1, pad(I), P2)}, S1 ++ S2} | T], R, I, Acc);
-p1([{{ol, P1}, S1}, {{codeblock, P2}, S2} | T], R, I , Acc) ->
-    p1([{{ol, merge(P1, pad(I), P2)}, S1 ++ S2} | T], R, I, Acc);
-p1([{{ol, _P}, _} | _T] = List, R, I, Acc) ->
-    {Rest, NewAcc} = parse_list(ol, List, R, I, [], false),
-    p1(Rest, R, I,  [pad(I) ++ "<ol>\n" ++ NewAcc
+p1([{{ol, P1}, S1}, {{normal, P2}, S2} | T], I , Acc) ->
+    p1([{{ol, merge(P1, pad(I), P2)}, S1 ++ S2} | T], I, Acc);
+p1([{{ol, P1}, S1}, {{codeblock, P2}, S2} | T], I , Acc) ->
+    p1([{{ol, merge(P1, pad(I), P2)}, S1 ++ S2} | T], I, Acc);
+p1([{{ol, _P}, _} | _T] = List, I, Acc) ->
+    {Rest, NewAcc} = parse_list(ol, List, I, [], false),
+    p1(Rest, I,  [pad(I) ++ "<ol>\n" ++ NewAcc
                            ++ pad(I) ++ "</ol>\n" | Acc]);
 
 %% codeblock consumes any following empty lines
 %% and other codeblocks
-p1([{{codeblock, P1}, S1}, {{codeblock, P2}, S2} | T], R, I, Acc) ->
-    p1([{{codeblock, merge(P1, pad(I), P2)}, S1 ++ S2} | T], R, I, Acc);
-p1([{{codeblock, P}, _} | T], R, I, Acc) ->
+p1([{{codeblock, P1}, S1}, {{codeblock, P2}, S2} | T], I, Acc) ->
+    p1([{{codeblock, merge(P1, pad(I), P2)}, S1 ++ S2} | T], I, Acc);
+p1([{{codeblock, P}, _} | T], I, Acc) ->
     Rest = grab_empties(T),
-    p1(Rest, R, I,  ["<pre><code>" ++ make_str(snip(P), R)
+    p1(Rest, I,  ["<pre><code>" ++ make_str(snip(P))
                      ++ "\n</code></pre>\n\n" | Acc]).
 
 grab_for_blockhtml([], Type, Acc) ->
@@ -223,17 +220,17 @@ pad1(N, Acc) when N > 0 -> pad1(N - 1, ["  " | Acc]).
 %% If your li's have a blank line between them the item gets wrapped in a para,
 %% if not, they don't
 %% BUT if one item is <p> wrapped then the next is too
-parse_list(_Type, [], _R, _I, A, _) ->
+parse_list(_Type, [], _I, A, _) ->
     {[], reverse(A)};
-parse_list(Type, [{{Type, P}, _} | T], R, I, A, Wrap) ->
-    {Rest, NewP, NewWrap} = grab(T, R, [], Wrap),
+parse_list(Type, [{{Type, P}, _} | T], I, A, Wrap) ->
+    {Rest, NewP, NewWrap} = grab(T, [], Wrap),
     Li = case NewWrap of
-             false -> Ret = parse([{normal, P}], R),
+             false -> Ret = parse([{normal, P}]),
                       % need to strip off the extra <p></p>'s
                       Ret2 = string:left(Ret, length(Ret) - 4),
                       Ret3 = string:right(Ret2, length(Ret2) -3),
                       Ret3 ++ "\n" ++ NewP ++ pad(I);
-             true  -> string:strip(parse([{normal, P}], R), right, ?LF)
+             true  -> string:strip(parse([{normal, P}]), right, ?LF)
                           ++ NewP ++ pad(I)
          end,
     NewWrap2 = case T of
@@ -243,10 +240,10 @@ parse_list(Type, [{{Type, P}, _} | T], R, I, A, Wrap) ->
                                      _             -> false
                                  end
                end,
-    parse_list(Type, Rest, R, I, [pad(I) ++ "<li>"
+    parse_list(Type, Rest, I, [pad(I) ++ "<li>"
                                   ++ string:strip(Li, right, ?LF)
                                   ++ "</li>\n" | A], NewWrap2);
-parse_list(_Type, List, _R, _I, A, _) ->
+parse_list(_Type, List, _I, A, _) ->
     {List, reverse(A)}.
 
 %% grab grabs normals, double codeblocks, linefeeds and blanks
@@ -254,31 +251,31 @@ parse_list(_Type, List, _R, _I, A, _) ->
 %% UNLESS the normal starts with white space :(
 %% the third return parameter is 'true' if the 'li' should be
 %% wrapped in '<p></p>' and false if it shouldn't
-grab([{{codeblock, _}, S} | T] = List, R, Acc, W) ->
+grab([{{codeblock, _}, S} | T] = List, Acc, W) ->
     case is_double_indent(S) of
         false      ->
             {List, reverse(Acc), false};
         {true, R2} ->
             %% if it is a double indent - delete 4 spaces
             %% no it makes not sense to me neither :(
-            grab(T, R, ["    " ++ make_esc_str(R2, R) | Acc], W)
+            grab(T, ["    " ++ make_esc_str(R2) | Acc], W)
     end;
-grab([{linefeed, _} | T], R, Acc, false) ->
-    grab2(T, R, Acc, T, Acc, true);
-grab([{linefeed, _} | T], R, Acc, true) ->
-    grab2(T, R, ["\n" | Acc], T, Acc, true);
-grab([{blank, _} | T], R, Acc, false) ->
-    grab2(T, R, Acc, T, Acc, true);
-grab([{blank, _} | T], R, Acc, true) ->
-    grab2(T, R, ["\n" | Acc], T, Acc, true);
-grab([{normal, P} | T], R, Acc, W) ->
+grab([{linefeed, _} | T], Acc, false) ->
+    grab2(T, Acc, T, Acc, true);
+grab([{linefeed, _} | T], Acc, true) ->
+    grab2(T, ["\n" | Acc], T, Acc, true);
+grab([{blank, _} | T], Acc, false) ->
+    grab2(T, Acc, T, Acc, true);
+grab([{blank, _} | T], Acc, true) ->
+    grab2(T, ["\n" | Acc], T, Acc, true);
+grab([{normal, P} | T], Acc, W) ->
      Li = case W of
-              false -> make_esc_str(P, R);
-              true  -> "<p>"++ string:strip(make_esc_str(P, R), right, ?LF)
+              false -> make_esc_str(P);
+              true  -> "<p>"++ string:strip(make_esc_str(P), right, ?LF)
                            ++ "</p>"
           end,
-     grab(T, R, [Li | Acc], W);
-grab(List, _R, Acc, W) ->
+     grab(T, [Li | Acc], W);
+grab(List, Acc, W) ->
     {List, reverse(Acc), W}.
 
 %% the problem is knowing when to grab, if the list is followed by a long
@@ -286,25 +283,25 @@ grab(List, _R, Acc, W) ->
 %% grabbed
 %% if the list if followed by blank lines and linefeeds and a normal with an
 %% initial whitespace it is grabbed...
-grab2([{normal, P2} | T], R, Acc, LO, AO, W) ->
+grab2([{normal, P2} | T], Acc, LO, AO, W) ->
     case P2 of
         [{{ws, _}, _} | T2] ->
             Li = case W of
-                     false -> make_esc_str(T2, R);
+                     false -> make_esc_str(T2);
                      true  -> "<p>" ++
-                                  string:strip(make_esc_str(T2, R), right, ?LF)
+                                  string:strip(make_esc_str(T2), right, ?LF)
                                   ++ "</p>"
                  end,
-            grab(T, R, [Li | Acc], W);
+            grab(T, [Li | Acc], W);
         _ ->
             {LO, AO, false}
     end;
-grab2([{linefeed, _} | T], R, Acc, LO, AO, _W) ->
-    grab2(T, R, ["\n" | Acc], LO, AO, true);
-grab2([{blank, _} | T], R, Acc, LO, AO, _W) ->
-    grab2(T, R, ["\n" | Acc], LO, AO, true);
+grab2([{linefeed, _} | T], Acc, LO, AO, _W) ->
+    grab2(T, ["\n" | Acc], LO, AO, true);
+grab2([{blank, _} | T], Acc, LO, AO, _W) ->
+    grab2(T, ["\n" | Acc], LO, AO, true);
 %% We dont want to grab this stuff so return the old list and the old acc
-grab2(_List, _R, _Acc, LO, AO, _W) ->
+grab2(_List, _Acc, LO, AO, _W) ->
     {LO, AO, true}.
 
 is_double_indent(List) -> is_double_indent1(List, 0).
@@ -347,49 +344,49 @@ ml2(H, List) -> reverse([H | List]).
 %%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 type_lines(Lines) ->
-    {Refs, TypedLines} = t_l1(Lines, [], []),
+    TypedLines = t_l1(Lines, []),
     % io:format("TypedLines before stripping ~p~n", [TypedLines]),
-    {strip_lines(TypedLines), Refs}.
+    strip_lines(TypedLines).
 
-t_l1([], A1, A2) -> {A1, reverse(A2)};
+t_l1([], A2) -> reverse(A2);
 
 %% types atx lines
-t_l1([[{{md, atx}, _} | _T] = H | T], A1, A2) ->
-    t_l1(T, A1, [type_atx(H) | A2]);
+t_l1([[{{md, atx}, _} | _T] = H | T], A2) ->
+    t_l1(T, [type_atx(H) | A2]);
 
 %% types unordered lists lines
 t_l1([[{{ws, _}, _}, {{md, star}, _} = ST1,
-       {{ws, _}, _} = WS1 | T1] = H | T], A1, A2) ->
-    t_l1(T, A1, [{type_star2([ST1, WS1 | T1]), H} | A2]);
-t_l1([[{{md, star}, _}, {{ws, _}, _} | _T1] = H | T], A1, A2) ->
-    t_l1(T, A1, [{type_star2(H), H} | A2]);
+       {{ws, _}, _} = WS1 | T1] = H | T], A2) ->
+    t_l1(T, [{type_star([ST1, WS1 | T1]), H} | A2]);
+t_l1([[{{md, star}, _}, {{ws, _}, _} | _T1] = H | T], A2) ->
+    t_l1(T, [{type_star(H), H} | A2]);
 
 %% types ordered lists...
-t_l1([[{{ws, _}, _}, {num, _} = N1| T1] | T], A1, A2) ->
-    t_l1(T, A1, [type_ol([N1 | T1]) | A2]);
-t_l1([[{num, _} | _T] = H | T], A1, A2) ->
-    t_l1(T, A1, [type_ol(H) | A2]);
+t_l1([[{{ws, _}, _}, {num, _} = N1| T1] | T], A2) ->
+    t_l1(T, [type_ol([N1 | T1]) | A2]);
+t_l1([[{num, _} | _T] = H | T], A2) ->
+    t_l1(T, [type_ol(H) | A2]);
 
 %% Block level tags - these are look ahead they must be
 %% on a single line (ie directly followed by a lf and nothing else
-t_l1([[{{{tag, _Type}, Tag}, _ } = H | T1] = List | T], A1, A2) ->
+t_l1([[{{{tag, _Type}, Tag}, _ } = H | T1] = List | T], A2) ->
     case is_blank(T1) of
-        false -> t_l1(T, A1, [{normal , List} | A2]);
+        false -> t_l1(T, [{normal , List} | A2]);
         true  -> case is_block_tag(Tag) of
-                     true  -> t_l1(T, A1, [{blocktag , [H]} | A2]);
-                     false -> t_l1(T, A1, [{tag, [H | T1]} | A2])
+                     true  -> t_l1(T, [{blocktag , [H]} | A2]);
+                     false -> t_l1(T, [{tag, [H | T1]} | A2])
                  end
     end;
 
 %% types a blank line or a code block
-t_l1([[{{lf, _}, _}| []]  = H | T], A1, A2) ->
-    t_l1(T, A1, [{linefeed, H} | A2]);
-t_l1([[{{ws, _}, _} | _T1] = H | T], A1, A2) ->
-    t_l1(T, A1, [type_ws(H) | A2]);
+t_l1([[{{lf, _}, _}| []]  = H | T], A2) ->
+    t_l1(T, [{linefeed, H} | A2]);
+t_l1([[{{ws, _}, _} | _T1] = H | T], A2) ->
+    t_l1(T, [type_ws(H) | A2]);
 
 %% Final clause...
-t_l1([H | T], A1, A2) ->
-    t_l1(T, A1, [{normal , H} | A2]).
+t_l1([H | T], A2) ->
+    t_l1(T, [{normal , H} | A2]).
 
 %% strips blanks from the beginning and end
 strip_lines(List) -> reverse(strip_l1(reverse(strip_l1(List)))).
@@ -412,7 +409,7 @@ is_block_tag("span")  -> true;
 is_block_tag("image") -> true;
 is_block_tag("a")     -> true.
 
-type_star2(List) ->
+type_star(List) ->
     case trim_right(List) of
         [{{md, star}, _}, {{ws, _}, _},
          {{md, star}, _}, {{ws, _}, _},
@@ -538,13 +535,13 @@ gt(String, Len) ->
     end.
 
 %% make a tag into a string
-make_tag_str(L, R) -> make_tag1(L, R, []).
+make_tag_str(L) -> make_tag1(L, []).
 
-make_tag1([], _R, Acc) -> lists:reverse(Acc);
-make_tag1([{{{tag, _Type}, _Tag}, B} | T], R, Acc) ->
-    make_tag1(T, R, [B | Acc]);
-make_tag1([H | T], R, Acc) ->
-    make_tag1(T, R, [make_str([H], R) | Acc]).
+make_tag1([], Acc) -> lists:reverse(Acc);
+make_tag1([{{{tag, _Type}, _Tag}, B} | T], Acc) ->
+    make_tag1(T, [B | Acc]);
+make_tag1([H | T], Acc) ->
+    make_tag1(T, [make_str([H]) | Acc]).
 
 esc_tag(String) -> esc_t1(String, []).
 
@@ -734,30 +731,30 @@ m_plain([], Acc)                           -> flatten(reverse(Acc));
 m_plain([{{ws, none}, none} | T], Acc)     -> m_plain(T, [" " | Acc]);
 m_plain([{_, Str} | T], Acc)               -> m_plain(T, [Str | Acc]).
 
-make_esc_str(List, Refs) -> m_esc(List, Refs, []).
+make_esc_str(List) -> m_esc(List, []).
 
-m_esc([], _R, A)               -> flatten(reverse(A));
-m_esc([{tags, Tag} | T], R, A) -> m_esc(T, R, [{tags, Tag} | A]);
-m_esc([H | T], R, A)           -> m_esc(T, R, [make_str([H], R) | A]).
+m_esc([], A)                -> flatten(reverse(A));
+m_esc([{tags, Tag} | T], A) -> m_esc(T, [{tags, Tag}   | A]);
+m_esc([H | T], A)           -> m_esc(T, [make_str([H]) | A]).
 
 
-make_str(List, Refs) -> m_str1(List, Refs, []).
+make_str(List) -> m_str1(List, []).
 
-m_str1([], _R, A) ->
+m_str1([], A) ->
     Flat = flatten(reverse(A)),
     htmlchars(Flat);
-m_str1([{tags, _} = Tag | T], R, A) ->
-    m_str1(T, R, [Tag | A]);
-m_str1([{{{tag, Type}, Tag}, _} | T], R, A) ->
+m_str1([{tags, _} = Tag | T], A) ->
+    m_str1(T, [Tag | A]);
+m_str1([{{{tag, Type}, Tag}, _} | T], A) ->
     Tag2 = esc_tag(Tag),
     TagStr = case Type of
                  open         -> {tags, "&lt;"  ++ Tag2 ++ "&gt;"};
                  close        -> {tags, "&lt;/" ++ Tag2 ++ "&gt;"};
                  self_closing -> {tags, "&lt;"  ++ Tag2 ++ " /&gt;"}
              end,
-    m_str1(T, R, [TagStr | A]);
-m_str1([{_, Orig} | T], R, A)  ->
-    m_str1(T, R, [Orig | A]).
+    m_str1(T, [TagStr | A]);
+m_str1([{_, Orig} | T], A)  ->
+    m_str1(T, [Orig | A]).
 
 %% convert ascii into html characters
 %% htmlencode(List) ->
