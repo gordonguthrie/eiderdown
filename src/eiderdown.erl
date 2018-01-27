@@ -112,6 +112,7 @@ make_html([#ast{type = {heading, N}, padding = _I, content = Text} | T], Acc) ->
 make_html([#ast{type = _Type, padding = _I, content = Text} | T], Acc) ->
     make_html(T, [Text | Acc]);
 make_html([Text | T], Acc) ->
+    gg:format("Text is ~p~n", [Text]),
     make_html(T, [Text | Acc]).
 
 %% goes through the lines
@@ -644,11 +645,7 @@ l1([$<, $/|T], A1, A2)     -> {Tag, NewT} = closingdiv(T, []),
 l1([$< | T], A1, A2)       -> {Tag, NewT} = openingdiv(T),
                               l1(NewT, [], [Tag , l2(A1) | A2]);
 %% these clauses are the normal lexer clauses
-l1([$= | T], A1, A2)       -> l1(T, [], [{{md, eq}, "="},   l2(A1) | A2]);
-l1([$- | T], A1, A2)       -> l1(T, [], [{{md, dash}, "-"}, l2(A1) | A2]);
 l1([$# | T], A1, A2)       -> l1(T, [], [{{md, atx}, "#"},  l2(A1) | A2]);
-l1([$> | T], A1, A2)       -> l1(T, [], [{{md, gt}, ">"},   l2(A1) | A2]);
-l1([$+ | T], A1, A2)       -> l1(T, [], [{{md, plus}, "+"}, l2(A1) | A2]);
 l1([$* | T], A1, A2)       -> l1(T, [], [{{md, star}, "*"}, l2(A1) | A2]);
 l1([$_ | T], A1, A2)       -> l1(T, [], [{{md, underscore}, "_"}, l2(A1) | A2]);
 l1([$1 | T], A1, A2)       -> l1(T, [], [{num, "1"}, l2(A1) | A2]);
@@ -662,17 +659,11 @@ l1([$8 | T], A1, A2)       -> l1(T, [], [{num, "8"}, l2(A1) | A2]);
 l1([$9 | T], A1, A2)       -> l1(T, [], [{num, "9"}, l2(A1) | A2]);
 l1([$0 | T], A1, A2)       -> l1(T, [], [{num, "0"}, l2(A1) | A2]);
 l1([$. | T], A1, A2)       -> l1(T, [], [{{punc, fullstop}, "."}, l2(A1) | A2]);
-l1([$: | T], A1, A2)       -> l1(T, [], [{{punc, colon}, ":"}, l2(A1) | A2]);
-l1([$' | T], A1, A2)       -> l1(T, [], [{{punc, singleq}, "'"}, l2(A1) | A2]); %'
+l1([$' | T], A1, A2)       -> l1(T, [], [{{punc, singleq}, "'"},  l2(A1) | A2]); %'
 l1([$" | T], A1, A2)       -> l1(T, [], [{{punc, doubleq}, "\""}, l2(A1) | A2]); %"
 l1([$` | T], A1, A2)       -> l1(T, [], [{{punc, backtick}, "`"}, l2(A1) | A2]); %"
-l1([$! | T], A1, A2)       -> l1(T, [], [{{punc, bang}, "!"}, l2(A1) | A2]); %"
 l1([$\\ | T], A1, A2)      -> l1(T, [], [{{punc, bslash}, "\\"}, l2(A1) | A2]); %"
 l1([$/ | T], A1, A2)       -> l1(T, [], [{{punc, fslash}, "/"}, l2(A1) | A2]); %"
-l1([$( | T], A1, A2)       -> l1(T, [], [{bra, "("}, l2(A1) | A2]);
-l1([$) | T], A1, A2)       -> l1(T, [], [{ket, ")"}, l2(A1) | A2]);
-l1([$[ | T], A1, A2)       -> l1(T, [], [{{inline, open}, "["}, l2(A1) | A2]);
-l1([$] | T], A1, A2)       -> l1(T, [], [{{inline, close}, "]"}, l2(A1) | A2]);
 %% note there is a special 'whitespace' {{ws, none}, ""} which is used to generate non-space
 %% filling whitespace for cases like '*bob* is great' which needs a non-space filling
 %% whitespace prepended to trigger emphasis so it renders as "<em>bob</em> is great...
