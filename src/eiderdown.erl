@@ -102,6 +102,7 @@ p1([], _R, _I, Acc)    -> flatten(reverse(Acc));
 
 %% Tags have the highest precedence...
 p1([{tag, Tag} | T], R, I, Acc) ->
+    io:format("in p1 tag for ~p~n", [Tag]),
     case T of
         []                -> p1([], R, I,
                                 ["</p>", make_tag_str(Tag, R), "<p>" | Acc]);
@@ -112,6 +113,7 @@ p1([{tag, Tag} | T], R, I, Acc) ->
     end;
 
 p1([{blocktag, [{{{tag, open}, Type}, Tg}] = _Tag} | T], R, I, Acc) ->
+    io:format("in p1 tag for blocktag for ~p : ~p~n", [Type, Tg]),
     {Block, Rest} = grab_for_blockhtml(T, Type, []),
     Str = lists:flatten([Tg, "\n" | Block]),
     p1(Rest, R, I, [Str | Acc]);
@@ -774,7 +776,7 @@ openingdiv1([$/,$>| T], Acc) -> Acc2 = flatten(reverse(Acc)),
                                   ++ Acc2 ++ "/>"}, T};
 %% special for non-tags
 openingdiv1([$>| T], [])     -> {[{{punc, bra}, "<"},
-                                          {{punc, ket}, ">"}], T};
+                                  {{punc, ket}, ">"}], T};
 openingdiv1([$>| T], Acc)    -> Acc2 = flatten(reverse(Acc)),
                                 Acc3 = string:to_lower(Acc2),
                                 [Tag | _T] = string:tokens(Acc3, " "),
