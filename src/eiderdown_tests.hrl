@@ -1,7 +1,6 @@
 unit_test_() ->
     [
      ?_assertEqual("<p>=></p>", conv("=>")),
-     ?_assertEqual("<blockquote>\n  <p>=</p>\n</blockquote>", conv(">=")),
      ?_assertEqual("<p>=&lt;</p>", conv("=<")),
      ?_assertEqual("<p>&lt;=</p>", conv("<=")),
      ?_assertEqual("<p>&lt;></p>", conv("<>")),
@@ -15,7 +14,6 @@ unit_test_() ->
      ?_assertEqual("<p>should be <em>italic</em> should be <strong>bold</strong> should be <strong><em>bold italic</em></strong></p>", conv("should be *italic* should be **bold** should be ***bold italic***")),
      ?_assertEqual("<p>some stuff <code>yaycode</code> more stuff <code>more code!</code></p>", conv("some stuff `yaycode` more stuff `more code!`")),
      ?_assertEqual("<pre><code>alice\nbob\n</code></pre>\n\n<p>chaz</p>", conv("    alice\n    bob\nchaz")),
-     ?_assertEqual("<blockquote>\n  <p>alice\n  bob\n  chaz</p>\n</blockquote>", conv("> alice\n> bob\n> chaz")),
      ?_assertEqual("<ol>\n<li>a</li>\n<li>b</li>\n</ol>", conv(" 1. a\n 2. b\n")),
 
      ?_assertEqual("<p>Now is the winter of <code>our discontent</code> made glorious summer by this Son of York</p>", conv("Now is the winter of `our discontent` made glorious summer by this Son of York")),
@@ -44,8 +42,6 @@ unit_test_() ->
      ?_assertEqual("<ol>\n<li>blah</li>\n</ol>", conv("1. blah")),
      ?_assertEqual("<p>*blah\na</p>", conv("*blah\na")),
      ?_assertEqual("<ul>\n<li>blah</li>\n</ul>", conv("* blah")),
-     ?_assertEqual("<p>bleh</p>\n\n<blockquote>\n  <p>blah</p>\n</blockquote>", conv("bleh\n> blah")),
-     ?_assertEqual("<blockquote>\n  <p>blah\n  a</p>\n</blockquote>", conv("> blah\na")),
      ?_assertEqual("<h1>blahblah</h1>\n\n<p>bleh</p>", conv("# blahblah ###\nbleh")),
      ?_assertEqual("<h6># blahblah</h6>\n\n<p>bleh</p>", conv("####### blahblah\nbleh")),
      ?_assertEqual("<h6>blahblah</h6>\n\n<p>bleh</p>", conv("###### blahblah\nbleh")),
@@ -160,7 +156,6 @@ unit_test_() ->
      ?_assertEqual("<p>1 ab:c\na</p>", conv("1 ab:c\na")),
      ?_assertEqual("<p>_ ab:c\na</p>", conv("_ ab:c\na")),
      ?_assertEqual("<ul>\n<li>ab:c\na</li>\n</ul>", conv("* ab:c\na")),
-     ?_assertEqual("<blockquote>\n  <p>ab:c\n  a</p>\n</blockquote>", conv("> ab:c\na")),
      ?_assertEqual("<h1>ab:c</h1>\n\n<p>a</p>", conv("# ab:c\na")),
      ?_assertEqual("<p>= ab:c\na</p>", conv("= ab:c\na")),
      ?_assertEqual("<p>/ ab:c\na</p>", conv("/ ab:c\na")),
@@ -196,7 +191,6 @@ unit_test_() ->
      ?_assertEqual("<p>_ab:c\na</p>", conv("_ab:c\na")),
      ?_assertEqual("<p>*ab:c\na</p>", conv("*ab:c\na")),
      ?_assertEqual("<p>+ab:c\na</p>", conv("+ab:c\na")),
-     ?_assertEqual("<blockquote>\n  <p>ab:c\n  a</p>\n</blockquote>", conv(">ab:c\na")),
      ?_assertEqual("<h1>ab:c</h1>\n\n<p>a</p>", conv("#ab:c\na")),
      ?_assertEqual("<p>-ab:c\na</p>", conv("-ab:c\na")),
      ?_assertEqual("<p>=ab:c\na</p>", conv("=ab:c\na")),

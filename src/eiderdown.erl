@@ -35,13 +35,10 @@
 %%% * reference style images
 %%% * special line types
 %%%   - blank
-%%%   - SETEXT header lines %% KILL
 %%%   - ATX header lines
-%%%   - blockquote
 %%%   - unordered lists
 %%%   - ordered lists
 %%%   - code blocks
-%%%   - horizontal rules
 %%% the parser then does its magic interpolating the references as appropriate
 conv(String) -> Lex = lex(String),
                 io:format("Lex is ~p~n", [Lex]),
@@ -129,20 +126,6 @@ p1([{Type, _} | T], R, I, Acc)
 p1([{normal, P1}, {normal, P2} | T], R, I, Acc) ->
     p1([{normal, merge(P1, pad(I), P2)} | T], R, I, Acc);
 %% as should a normal and linefeed
-
-%% blockquotes swallow each other
-%% replace the first blockquote mark with a space...
-p1([{blockquote, P1}, {blockquote, [_ | P2]} | T], R, I, Acc) ->
-    p1([{blockquote, merge(P1, pad(I), [{{ws, sp}, " "} | P2])} | T], R, I, Acc);
-%% blockquotes swallow normal
-p1([{blockquote, P1}, {normal, P2} | T], R, I, Acc) ->
-    p1([{blockquote, merge(P1, pad(I + 1), P2)} | T], R, I, Acc);
-%% blockquote
-p1([{blockquote, P} | T], R, I, Acc) ->
-    [{{md, gt}, _} | T1] = P,
-    T2 = string:strip(make_str(T1, R)),
-    p1(T, R, I,
-       ["\n<blockquote>\n" ++ pad(I + 1) ++ "<p>" ++ T2 ++ "</p>\n</blockquote>" | Acc]);
 
 %% one normal is just normal...
 p1([{normal, P} | T], R, I, Acc) ->
@@ -272,21 +255,13 @@ parse_list(_Type, List, _R, _I, A, _) ->
 %% the third return parameter is 'true' if the 'li' should be
 %% wrapped in '<p></p>' and false if it shouldn't
 grab([{{codeblock, _}, S} | T] = List, R, Acc, W) ->
-    case is_blockquote(S, T) of
-        {{true, R1}, T2}       -> grab(T2, R,
-                                       ["</blockquote>",
-                                        make_esc_str(R1, R),
-                                        "<blockquote>" | Acc], W);
-        {{esc_false, R1}, _T2} -> {R1, reverse(Acc), false};
-        {false, T2}            ->
-            case is_double_indent(S) of
-                false      ->
-                    {List, reverse(Acc), false};
-                {true, R2} ->
-                    % if it is a double indent - delete 4 spaces
-                    % no it makes not sense to me neither :(
-                    grab(T2, R, ["    " ++ make_esc_str(R2, R) | Acc], W)
-            end
+    case is_double_indent(S) of
+        false      ->
+            {List, reverse(Acc), false};
+        {true, R2} ->
+            %% if it is a double indent - delete 4 spaces
+            %% no it makes not sense to me neither :(
+            grab(T, R, ["    " ++ make_esc_str(R2, R) | Acc], W)
     end;
 grab([{linefeed, _} | T], R, Acc, false) ->
     grab2(T, R, Acc, T, Acc, true);
@@ -342,29 +317,6 @@ is_double_indent1([{{ws, sp}, _} | T], N)  -> is_double_indent1(T, N + 1);
 is_double_indent1([{{ws, tab}, _} | T], N) -> is_double_indent1(T, N + 4);
 is_double_indent1(_List, _N)               -> false.
 
-is_blockquote(List, T) ->
-    case is_bq1(List, 0) of
-        false          -> {false, T};
-        {esc_false, R} -> {{esc_false, R}, T};
-        {true, R}      -> {NewT, NewR} = grab2(T, R),
-                          {{true, NewR}, NewT}
-    end.
-
-is_bq1([], _N)                            -> false;
-is_bq1([{{ws, sp}, _} | T], N)            -> is_bq1(T, N + 1);
-is_bq1([{{ws, tab}, _} | T], N)           -> is_bq1(T, N + 4);
-is_bq1([{{md, gt}, _},
-        {{ws, _}, _} | T], N) when N > 3  -> {true, T};
-is_bq1([{{punc, bslash}, _},
-        {{md, gt}, GT},
-        {{ws, _}, WS} | T], N) when N > 3 -> {esc_false, [GT, WS | T]};
-is_bq1(_List, _N)                         -> false.
-
-grab2(List, R) -> gb2(List, reverse(R)).
-
-gb2([], Acc)               -> {[], flatten(reverse(Acc))};
-gb2([{blank, _} | T], Acc) -> {T, flatten(reverse(Acc))};
-gb2([{_Type, P} | T], Acc) -> gb2(T, [P | Acc]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%
@@ -391,9 +343,7 @@ ml2(H, List) -> reverse([H | List]).
 %%%   - ATX header lines
 %%%   - unordered lists (including code blocks)
 %%%   - ordered lists (including code blocks)
-%%%   - blockquotes
 %%%   - code blocks
-%%%   - horizontal rules
 %%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 type_lines(Lines) ->
@@ -407,17 +357,6 @@ t_l1([], A1, A2) -> {A1, reverse(A2)};
 t_l1([[{{md, atx}, _} | _T] = H | T], A1, A2) ->
     t_l1(T, A1, [type_atx(H) | A2]);
 
-%% types blockquotes
-%% a blockquote on its own or followed by a linefeed is
-%% displayed 'as is' by showdown
-t_l1([[{{md, gt}, _} | []] = H | T], A1, A2) ->
-    t_l1(T, A1, [{normal, H} | A2]);
-t_l1([[{{md, gt}, _}, {{lf, _}, _} | []] = H | T], A1, A2) ->
-    t_l1(T, A1, [{normal, H} | A2]);
-%% one with anything after it starts a blockquote
-t_l1([[{{md, gt}, _} | _T1] = H | T], A1, A2) ->
-    t_l1(T, A1, [{blockquote, H} | A2]);
-
 %% types unordered lists lines
 t_l1([[{{ws, _}, _}, {{md, star}, _} = ST1,
        {{ws, _}, _} = WS1 | T1] = H | T], A1, A2) ->
@@ -430,13 +369,6 @@ t_l1([[{{ws, _}, _}, {num, _} = N1| T1] | T], A1, A2) ->
     t_l1(T, A1, [type_ol([N1 | T1]) | A2]);
 t_l1([[{num, _} | _T] = H | T], A1, A2) ->
     t_l1(T, A1, [type_ol(H) | A2]);
-
-%% types horizontal rules for stars and underscores
-%% dashes and some stars are done elsewhere...
-t_l1([[{{md, underscore}, _} | _T1] = H | T], A1, A2) ->
-    t_l1(T, A1, [type_underscore(H) | A2]);
-t_l1([[{{md, star}, _} | _T1] = H | T], A1, A2) ->
-    t_l1(T, A1, [type_star(H) | A2]);
 
 %% Block level tags - these are look ahead they must be
 %% on a single line (ie directly followed by a lf and nothing else
@@ -479,41 +411,6 @@ is_block_tag("div")   -> true;
 is_block_tag("span")  -> true;
 is_block_tag("image") -> true;
 is_block_tag("a")     -> true.
-
-type_underscore(List) ->
-    case type_underscore1(trim_right(List)) of
-        hr    -> {hr, List};
-        maybe -> {type_underscore2(List), List}
-    end.
-
-type_underscore1([])                          -> hr;
-type_underscore1([{{md, underscore}, _} | T]) -> type_underscore1(T);
-type_underscore1(_List)                       -> maybe.
-
-type_underscore2(List) ->
-    case trim_right(List) of % be permissive of trailing spaces
-        [{{md, underscore}, _}, {{ws, _}, _},
-         {{md, underscore}, _}, {{ws, _}, _},
-         {{md, underscore}, _}]               -> hr;
-        _Other                                -> normal
-    end.
-
-type_star(List) ->
-    Trim = trim_right(List),
-    case type_star1(Trim) of % be permssive of trailing spaces
-        hr    -> {hr, trim_right(Trim)};
-        maybe -> Type = type_star2(List),
-                 % if it is a normal line we prepend it with a special
-                 % non-space filling white space character
-                 case Type of
-                     normal -> {normal, [{{ws, none}, none} | List]};
-                     _      -> {Type, List}
-                 end
-    end.
-
-type_star1([])                    -> hr;
-type_star1([{{md, star}, _} | T]) -> type_star1(T);
-type_star1(_List)                 -> maybe.
 
 type_star2(List) ->
     case trim_right(List) of
