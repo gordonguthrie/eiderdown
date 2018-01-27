@@ -659,11 +659,8 @@ l1([$8 | T], A1, A2)       -> l1(T, [], [{num, "8"}, l2(A1) | A2]);
 l1([$9 | T], A1, A2)       -> l1(T, [], [{num, "9"}, l2(A1) | A2]);
 l1([$0 | T], A1, A2)       -> l1(T, [], [{num, "0"}, l2(A1) | A2]);
 l1([$. | T], A1, A2)       -> l1(T, [], [{{punc, fullstop}, "."}, l2(A1) | A2]);
-l1([$' | T], A1, A2)       -> l1(T, [], [{{punc, singleq}, "'"},  l2(A1) | A2]); %'
-l1([$" | T], A1, A2)       -> l1(T, [], [{{punc, doubleq}, "\""}, l2(A1) | A2]); %"
+ %"
 l1([$` | T], A1, A2)       -> l1(T, [], [{{punc, backtick}, "`"}, l2(A1) | A2]); %"
-l1([$\\ | T], A1, A2)      -> l1(T, [], [{{punc, bslash}, "\\"}, l2(A1) | A2]); %"
-l1([$/ | T], A1, A2)       -> l1(T, [], [{{punc, fslash}, "/"}, l2(A1) | A2]); %"
 %% note there is a special 'whitespace' {{ws, none}, ""} which is used to generate non-space
 %% filling whitespace for cases like '*bob* is great' which needs a non-space filling
 %% whitespace prepended to trigger emphasis so it renders as "<em>bob</em> is great...
