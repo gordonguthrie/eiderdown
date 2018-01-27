@@ -109,8 +109,12 @@ make_html([#ast{type = {heading, N}, padding = _I, content = Text} | T], Acc) ->
         ++ Text
         ++ "</h" ++ integer_to_list(N) ++ ">\n",
     make_html(T, [HTML | Acc]);
-make_html([#ast{type = _Type, padding = _I, content = Text} | T], Acc) ->
-    make_html(T, [Text | Acc]);
+make_html([#ast{type = ol, padding = _I, content = Text} | T], Acc) ->
+    HTML = "<ol>\n" ++ Text ++ "</ol>\n",
+    make_html(T, [HTML | Acc]);
+make_html([#ast{type = ul, padding = _I, content = Text} | T], Acc) ->
+    HTML = "<ul>\n" ++ Text ++ "</ul>\n",
+    make_html(T, [HTML | Acc]);
 make_html([Text | T], Acc) ->
     gg:format("Text is ~p~n", [Text]),
     make_html(T, [Text | Acc]).
@@ -197,8 +201,9 @@ p1([{{ul, P1}, S1}, {{codeblock, P2}, S2} | T], I , Acc) ->
     p1([{{ul, merge(P1, pad(I), P2)}, S1 ++ S2} | T], I, Acc);
 p1([{{ul, _P}, _} | _T] = List, I, Acc) ->
     {Rest, NewAcc} = parse_list(ul, List, I, [], false),
-    p1(Rest, I,  [pad(I) ++ ["<ul>\n"] ++ NewAcc
-                           ++ pad(I) ++ ["</ul>\n"] | Acc]);
+    p1(Rest, I,  [#ast{type    = ul,
+                       padding = I,
+                       content = NewAcc} | Acc]);
 
 %% ordered lists swallow normal and codeblock lines
 p1([{{ol, P1}, S1}, {{normal, P2}, S2} | T], I , Acc) ->
@@ -207,8 +212,9 @@ p1([{{ol, P1}, S1}, {{codeblock, P2}, S2} | T], I , Acc) ->
     p1([{{ol, merge(P1, pad(I), P2)}, S1 ++ S2} | T], I, Acc);
 p1([{{ol, _P}, _} | _T] = List, I, Acc) ->
     {Rest, NewAcc} = parse_list(ol, List, I, [], false),
-    p1(Rest, I,  [pad(I) ++ ["<ol>\n"] ++ NewAcc
-                           ++ pad(I) ++ ["</ol>\n"] | Acc]);
+    p1(Rest, I,  [#ast{type    = ol,
+                       padding = I,
+                       content = NewAcc} | Acc]);
 
 %% codeblock consumes any following empty lines
 %% and other codeblocks
