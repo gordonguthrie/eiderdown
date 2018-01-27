@@ -18,7 +18,7 @@ unit_test_() ->
 
      ?_assertEqual("<p>Now is the winter of <code>our discontent</code> made glorious summer by this Son of York</p>", conv("Now is the winter of `our discontent` made glorious summer by this Son of York")),
 
-     ?_assertEqual("<p>blah</p>\n\n<p>bleh</p>", conv("blah\n\n\nbleh")),
+     ?_assertEqual("<p>blah</p>\n<p>bleh</p>", conv("blah\n\n\nbleh")),
      ?_assertEqual("<p><code>&lt;div&gt;blah&lt;/div&gt;</code></p>", conv("`<div>blah</div>`")),
      ?_assertEqual("<p><em>_</em>blah\na</p>", conv("___blah\na")),
      ?_assertEqual("<p>---blah\na</p>", conv("---blah\na")),

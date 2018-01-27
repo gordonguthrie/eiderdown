@@ -145,11 +145,11 @@ p1([{blocktag, [{{{tag, open}, Type}, Tg}] = _Tag} | T], I, Acc) ->
     Str = lists:flatten([Tg, "\n" | Block]),
     p1(Rest, I, [Str | Acc]);
 
-%% blank lines/linefeeds are gobbled down
+%% blank lines/linefeeds are gobbled down and discarded
 p1([{Type, _} | T], I, Acc)
   when Type == blank orelse Type == linefeed ->
     Rest = grab_empties(T),
-    p1(Rest, I, [pad(I) ++ "\n" | Acc]);
+    p1(Rest, I, Acc);
 
 %% two consecutive normal lines should be concatenated...
 %% remembering the pad the second line with the indent...
