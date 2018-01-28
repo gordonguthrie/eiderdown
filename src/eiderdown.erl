@@ -151,11 +151,11 @@ p1([{Type, _} | T], I, Acc)
     Rest = grab_empties(T),
     p1(Rest, I, Acc);
 
-%% two consecutive normal lines should be concatenated...
-%% remembering the pad the second line with the indent...
-p1([{normal, P1}, {normal, P2} | T], I, Acc) ->
-    p1([{normal, merge(P1, pad(I), P2)} | T], I, Acc);
-%% as should a normal and linefeed
+%% %% two consecutive normal lines should be concatenated...
+%% %% remembering the pad the second line with the indent...
+%% p1([{normal, P1}, {normal, P2} | T], I, Acc) ->
+%%     p1([{normal, merge(P1, pad(I), P2)} | T], I, Acc);
+%% %% as should a normal and linefeed
 
 %% one normal is just normal...
 p1([{normal, P} | T], I, Acc) ->
@@ -246,17 +246,9 @@ grab_empties([{linefeed, _} | T]) -> grab_empties(T);
 grab_empties([{blank, _} | T])    -> grab_empties(T);
 grab_empties(List)                -> List.
 
-merge(P1, Pad, P2) ->
-    NewP1 = make_br(P1),
-    flatten([NewP1, {string, Pad} | P2]).
-
-make_br(List) -> make_br1(reverse(List)).
-
-make_br1([{{lf, _}, _},
-          {{ws, comp}, _} | T]) -> reverse([{tags, " <br />\n"} | T]);
-make_br1([{{lf, _}, _},
-          {{ws, tab}, _} | T])  -> reverse([{tags, " <br />\n"} | T]);
-make_br1(List)                  -> reverse(List).
+ merge(P1, Pad, P2) ->
+     % NewP1 = make_br(P1),
+    flatten([P1, {string, Pad} | P2]).
 
 pad(N) -> pad1(N, []).
 
