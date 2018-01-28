@@ -47,11 +47,11 @@
 %%%   - code blocks
 %%% the parser then does its magic interpolating the references as appropriate
 conv(String) -> Lex = lex(String),
-                io:format("Lex is ~p~n", [Lex]),
+                % io:format("Lex is ~p~n", [Lex]),
                 UntypedLines = make_lines(Lex),
-                io:format("UntypedLines are ~p~n", [UntypedLines]),
+                % io:format("UntypedLines are ~p~n", [UntypedLines]),
                 TypedLines = type_lines(UntypedLines),
-                io:format("TypedLines are ~p~n", [TypedLines]),
+                % io:format("TypedLines are ~p~n", [TypedLines]),
                 parse(TypedLines).
 
 -spec conv_utf8(list()) -> list().
@@ -95,7 +95,7 @@ write(File, Text) ->
 
 parse(TypedLines) ->
     AST = p1(TypedLines, 0, []),
-    io:format("AST is ~p~n", [AST]),
+    % io:format("AST is ~p~n", [AST]),
     HTML = make_html(AST, []),
     string:strip(HTML, both, $\n).
 
@@ -408,7 +408,7 @@ t_l1([[{num, _} | _T] = H | T], A2) ->
 
 %% Block level tags - these are look ahead they must be
 %% on a single line (ie directly followed by a lf and nothing else
-t_l1([[{{{tag, _Type}, Tag}, _ } = H | T1] = List | T], A2) ->
+t_l1([[{{{tag, _Type}, Tag}, _Contents} = H | T1] = List | T], A2) ->
     case is_blank(T1) of
         false -> t_l1(T, [{normal , List} | A2]);
         true  -> case is_block_tag(Tag) of
@@ -625,7 +625,9 @@ snip(List) -> List2 = reverse(List),
 %%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-lex(String) -> merge_ws(l1(String, [], [])).
+lex(String) ->
+    RawTokens = l1(String, [], []),
+    merge_ws(RawTokens).
 
 merge_ws(List) -> m_ws1(List, []).
 
