@@ -101,10 +101,10 @@ parse(TypedLines) ->
 
 make_html([], Acc) ->
     flatten(reverse(Acc));
-make_html([#ast{type = para, padding = _I, content = Text} | T], Acc) ->
+make_html([#ast{type = para, content = Text} | T], Acc) ->
     HTML = "<p>" ++ Text ++ "</p>\n",
     make_html(T, [HTML | Acc]);
-make_html([#ast{type = {heading, N}, padding = _I, content = Text} | T], Acc) ->
+make_html([#ast{type = {heading, N}, content = Text} | T], Acc) ->
     HTML = "<h" ++ integer_to_list(N) ++ ">"
         ++ Text
         ++ "</h" ++ integer_to_list(N) ++ ">\n",
@@ -114,6 +114,12 @@ make_html([#ast{type = ol, padding = _I, content = Text} | T], Acc) ->
     make_html(T, [HTML | Acc]);
 make_html([#ast{type = ul, padding = _I, content = Text} | T], Acc) ->
     HTML = "<ul>\n" ++ Text ++ "</ul>\n",
+    make_html(T, [HTML | Acc]);
+make_html([#ast{type = {code, none}, content = Text} | T], Acc) ->
+    HTML = "<pre><code>" ++ Text ++ "</code></pre>",
+    make_html(T, [HTML | Acc]);
+make_html([#ast{type = {code, Class}, content = Text} | T], Acc) ->
+    HTML = "<pre><code class='" ++ Class ++ "'>" ++ Text ++ "</code></pre>",
     make_html(T, [HTML | Acc]);
 make_html([#ast{type = tag, padding = _I, content = Text} | T], Acc) ->
     make_html(T, [Text | Acc]);
@@ -217,9 +223,26 @@ p1([{{ol, _P}, _} | _T] = List, I, Acc) ->
 p1([{{codeblock, P1}, S1}, {{codeblock, P2}, S2} | T], I, Acc) ->
     p1([{{codeblock, merge(P1, pad(I), P2)}, S1 ++ S2} | T], I, Acc);
 p1([{{codeblock, P}, _} | T], I, Acc) ->
-    Rest = grab_empties(T),
-    p1(Rest, I,  ["<pre><code>" ++ make_str(snip(P))
-                  ++ "\n</code></pre>\n\n" | Acc]).
+    Type = case P of
+               [{string, ""}]    -> {code, none};
+               [{string, Class}] -> {code, Class}
+           end,
+    {Content, Rest} = grab_for_codeblock(T, []),
+    AST = #ast{type    = Type,
+               content = Content},
+    p1(Rest, I, [AST | Acc]).
+
+%% two terminal clauses - if there is a muck up and no terminal
+%% block quote everything gets gobbled
+%% if there ia terminal blockquote normal control returns after that
+grab_for_codeblock([], Acc) ->
+    {lists:flatten(lists:reverse(Acc)), []};
+grab_for_codeblock([{{codeblock, _}, _} | T], Acc) ->
+    {lists:reverse(Acc), T};
+grab_for_codeblock([H | T], Acc) ->
+    {_Type, Content} = H,
+    Str = make_plain_str(Content),
+    grab_for_codeblock(T, [Str | Acc]).
 
 grab_for_blockhtml([], Type, Acc) ->
     {lists:reverse(["</" ++ Type ++ ">" | Acc]), []};
@@ -422,6 +445,23 @@ t_l1([[{{lf, _}, _}| []]  = H | T], A2) ->
 t_l1([[{{ws, _}, _} | _T1] = H | T], A2) ->
     t_l1(T, [type_ws(H) | A2]);
 
+%% type codeblocks
+t_l1([[{{punc, backtick}, _},
+       {{punc, backtick}, _},
+       {{punc, backtick}, _},
+       {string, Type},
+       {{lf, lf}, _}] = H | T], Acc) ->
+    t_l1(T, [{{codeblock, [{string, Type}]}, H} | Acc]);
+t_l1([[{{punc, backtick}, _},
+       {{punc, backtick}, _},
+       {{punc, backtick}, _},
+       {{lf, lf}, _}] = H | T], Acc) ->
+    t_l1(T, [{{codeblock, [{string, ""}]}, H} | Acc]);
+t_l1([[{{punc, backtick}, _},
+       {{punc, backtick}, _},
+       {{punc, backtick}, _}] = H | T], Acc) ->
+    t_l1(T, [{{codeblock, [{string, ""}]}, H} | Acc]);
+
 %% Final clause...
 t_l1([H | T], A2) ->
     t_l1(T, [{normal , H} | A2]).
@@ -536,38 +576,15 @@ s_atx1(List)                               -> List.
 
 type_ws(List) ->
     case type_ws1(List) of
-        blank         -> {blank, List};
-        try_codeblock ->
-            case type_ws2(List) of
-                normal           -> {normal, List};
-                {codeblock, Ret} -> {{codeblock, Ret}, List}
-            end
+        blank  -> {blank, List};
+        normal -> {normal, List}
     end.
 
 type_ws1([])                  -> blank;
 type_ws1([{{lf, _}, _} | []]) -> blank;
 type_ws1([[] | T])            -> type_ws1(T);
 type_ws1([{{ws, _}, _} | T])  -> type_ws1(T);
-type_ws1(_L)                  -> try_codeblock.
-
-%% 4 or more spaces takes you over the limit
-%% (a tab is 4...)
-type_ws2([{{ws, tab}, _} | T])  -> {codeblock, T};
-type_ws2([{{ws, comp}, W} | T]) -> case gt(W, 4) of
-                                       {true, R} -> {codeblock, [R| T]};
-                                       false     -> normal
-                                   end;
-type_ws2([{{ws, sp}, _} | _T])  -> normal.
-
-gt(String, Len) ->
-    ExpString = re:replace(String, "\t", "    ", [{return, list}]),
-    ExpStringLen = length(ExpString),
-    if
-        ExpStringLen >= Len -> WS = string:substr(ExpString, Len + 1,
-                                                  ExpStringLen),
-                               {true, {{ws, sp}, WS}};
-        ExpStringLen <  Len -> false
-    end.
+type_ws1(_L)                  -> normal.
 
 %% make a tag into a string
 make_tag_str(L) -> make_tag1(L, []).
@@ -649,8 +666,7 @@ l1([$7 | T], A1, A2)       -> l1(T, [], [{num, "7"}, l2(A1) | A2]);
 l1([$8 | T], A1, A2)       -> l1(T, [], [{num, "8"}, l2(A1) | A2]);
 l1([$9 | T], A1, A2)       -> l1(T, [], [{num, "9"}, l2(A1) | A2]);
 l1([$0 | T], A1, A2)       -> l1(T, [], [{num, "0"}, l2(A1) | A2]);
-l1([$. | T], A1, A2)       -> l1(T, [], [{{punc, fullstop}, "."}, l2(A1) | A2]);
-                                                %"
+l1([$. | T], A1, A2)       -> l1(T, [], [{{punc, fullstop}, "."}, l2(A1) | A2]); %"
 l1([$` | T], A1, A2)       -> l1(T, [], [{{punc, backtick}, "`"}, l2(A1) | A2]); %"
 %% note there is a special 'whitespace' {{ws, none}, ""} which is used to generate non-space
 %% filling whitespace for cases like '*bob* is great' which needs a non-space filling
