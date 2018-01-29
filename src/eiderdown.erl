@@ -47,11 +47,11 @@
 %%%   - code blocks
 %%% the parser then does its magic interpolating the references as appropriate
 conv(String) -> Lex = lex(String),
-                % io:format("Lex is ~p~n", [Lex]),
+                io:format("Lex is ~p~n", [Lex]),
                 UntypedLines = make_lines(Lex),
-                % io:format("UntypedLines are ~p~n", [UntypedLines]),
+                io:format("UntypedLines are ~p~n", [UntypedLines]),
                 TypedLines = type_lines(UntypedLines),
-                % io:format("TypedLines are ~p~n", [TypedLines]),
+                io:format("TypedLines are ~p~n", [TypedLines]),
                 parse(TypedLines).
 
 -spec conv_utf8(list()) -> list().
@@ -95,7 +95,7 @@ write(File, Text) ->
 
 parse(TypedLines) ->
     AST = p1(TypedLines, 0, []),
-    % io:format("AST is ~p~n", [AST]),
+    io:format("AST is ~p~n", [AST]),
     HTML = make_html(AST, []),
     string:strip(HTML, both, $\n).
 
@@ -115,8 +115,10 @@ make_html([#ast{type = ol, padding = _I, content = Text} | T], Acc) ->
 make_html([#ast{type = ul, padding = _I, content = Text} | T], Acc) ->
     HTML = "<ul>\n" ++ Text ++ "</ul>\n",
     make_html(T, [HTML | Acc]);
+make_html([#ast{type = tag, padding = _I, content = Text} | T], Acc) ->
+    make_html(T, [Text | Acc]);
 make_html([Text | T], Acc) ->
-    gg:format("Text is ~p~n", [Text]),
+    %% gg:format("Text is ~p~n", [Text]),
     make_html(T, [Text | Acc]).
 
 %% goes through the lines
@@ -150,12 +152,6 @@ p1([{Type, _} | T], I, Acc)
   when Type == blank orelse Type == linefeed ->
     Rest = grab_empties(T),
     p1(Rest, I, Acc);
-
-%% %% two consecutive normal lines should be concatenated...
-%% %% remembering the pad the second line with the indent...
-%% p1([{normal, P1}, {normal, P2} | T], I, Acc) ->
-%%     p1([{normal, merge(P1, pad(I), P2)} | T], I, Acc);
-%% %% as should a normal and linefeed
 
 %% one normal is just normal...
 p1([{normal, P} | T], I, Acc) ->
@@ -223,7 +219,7 @@ p1([{{codeblock, P1}, S1}, {{codeblock, P2}, S2} | T], I, Acc) ->
 p1([{{codeblock, P}, _} | T], I, Acc) ->
     Rest = grab_empties(T),
     p1(Rest, I,  ["<pre><code>" ++ make_str(snip(P))
-                     ++ "\n</code></pre>\n\n" | Acc]).
+                  ++ "\n</code></pre>\n\n" | Acc]).
 
 grab_for_blockhtml([], Type, Acc) ->
     {lists:reverse(["</" ++ Type ++ ">" | Acc]), []};
@@ -232,7 +228,7 @@ grab_for_blockhtml([{blocktag, [{{{tag, close}, Type}, Tg}]}
     {lists:reverse([Tg | Acc]), T};
 grab_for_blockhtml([{blocktag, [{{{tag, _}, GrabType}, Tg}]}
                     | T], Type,  Acc) when GrabType =/= Type ->
-    % blocktags grabbed in a blocktag need a line ending pushed
+    %% blocktags grabbed in a blocktag need a line ending pushed
     grab_for_blockhtml(T, Type, ["\n", Tg | Acc]);
 grab_for_blockhtml([{tag, {{{tag, self_closing}, _Ty}, Tg}}
                     | T], Type, Acc) ->
@@ -246,8 +242,7 @@ grab_empties([{linefeed, _} | T]) -> grab_empties(T);
 grab_empties([{blank, _} | T])    -> grab_empties(T);
 grab_empties(List)                -> List.
 
- merge(P1, Pad, P2) ->
-     % NewP1 = make_br(P1),
+merge(P1, Pad, P2) ->
     flatten([P1, {string, Pad} | P2]).
 
 pad(N) -> pad1(N, []).
@@ -265,7 +260,7 @@ parse_list(Type, [{{Type, P}, _} | T], I, A, Wrap) ->
     {Rest, NewP, NewWrap} = grab(T, [], Wrap),
     Li = case NewWrap of
              false -> Ret = parse([{normal, P}]),
-                      % need to strip off the extra <p></p>'s
+                      %% need to strip off the extra <p></p>'s
                       Ret2 = string:left(Ret, length(Ret) - 4),
                       Ret3 = string:right(Ret2, length(Ret2) -3),
                       Ret3 ++ "\n" ++ NewP ++ pad(I);
@@ -273,15 +268,15 @@ parse_list(Type, [{{Type, P}, _} | T], I, A, Wrap) ->
                           ++ NewP ++ pad(I)
          end,
     NewWrap2 = case T of
-                   []         -> false; % doesnt matter
+                   []         -> false; % doesn't matter
                    [H2 | _T2] -> case H2 of
                                      {linefeed, _} -> true;
                                      _             -> false
                                  end
                end,
     parse_list(Type, Rest, I, [pad(I) ++ "<li>"
-                                  ++ string:strip(Li, right, ?LF)
-                                  ++ "</li>\n" | A], NewWrap2);
+                               ++ string:strip(Li, right, ?LF)
+                               ++ "</li>\n" | A], NewWrap2);
 parse_list(_Type, List, _I, A, _) ->
     {List, reverse(A)}.
 
@@ -308,12 +303,12 @@ grab([{blank, _} | T], Acc, false) ->
 grab([{blank, _} | T], Acc, true) ->
     grab2(T, ["\n" | Acc], T, Acc, true);
 grab([{normal, P} | T], Acc, W) ->
-     Li = case W of
-              false -> make_esc_str(P);
-              true  -> "<p>"++ string:strip(make_esc_str(P), right, ?LF)
-                           ++ "</p>"
-          end,
-     grab(T, [Li | Acc], W);
+    Li = case W of
+             false -> make_esc_str(P);
+             true  -> "<p>"++ string:strip(make_esc_str(P), right, ?LF)
+                          ++ "</p>"
+         end,
+    grab(T, [Li | Acc], W);
 grab(List, Acc, W) ->
     {List, reverse(Acc), W}.
 
@@ -361,8 +356,8 @@ is_double_indent1(_List, _N)               -> false.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 make_lines(Tokens) -> ml1(Tokens, [], []).
 
-ml1([], [], A2)                -> reverse(A2);
-ml1([], A1, A2)                -> ml1([], [], [reverse(A1) | A2]);
+ml1([], [], A2)                     -> reverse(A2);
+ml1([], A1, A2)                     -> ml1([], [], [reverse(A1) | A2]);
 ml1([{{lf, _}, _} = H | T], A1, A2) -> ml1(T, [], [ml2(H, A1) | A2]);
 ml1([H | T], A1, A2)                -> ml1(T, [H | A1], A2).
 
@@ -384,7 +379,7 @@ ml2(H, List) -> reverse([H | List]).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 type_lines(Lines) ->
     TypedLines = t_l1(Lines, []),
-    % io:format("TypedLines before stripping ~p~n", [TypedLines]),
+    %% io:format("TypedLines before stripping ~p~n", [TypedLines]),
     strip_lines(TypedLines).
 
 t_l1([], A2) -> reverse(A2);
@@ -413,7 +408,11 @@ t_l1([[{{{tag, _Type}, Tag}, _Contents} = H | T1] = List | T], A2) ->
         false -> t_l1(T, [{normal , List} | A2]);
         true  -> case is_block_tag(Tag) of
                      true  -> t_l1(T, [{blocktag , [H]} | A2]);
-                     false -> t_l1(T, [{tag, [H | T1]} | A2])
+                     false ->
+                         case is_inline_tag(Tag) of
+                             true  -> t_l1(T, [{tag,    [H | T1]} | A2]);
+                             false -> t_l1(T, [{normal, [H | T1]} | A2])
+                         end
                  end
     end;
 
@@ -444,21 +443,18 @@ is_blank([{{ws, _}, _} | T])  -> is_blank(T);
 is_blank(_List)               -> false.
 
 is_block_tag("div")   -> true;
-is_block_tag("span")  -> true;
-is_block_tag("image") -> true;
-is_block_tag("a")     -> true.
+is_block_tag(_)       -> false.
+
+is_inline_tag("span")  -> true;
+is_inline_tag("image") -> true;
+is_inline_tag("a")     -> true;
+is_inline_tag(_)       -> false.
 
 type_star(List) ->
-    case trim_right(List) of
-        [{{md, star}, _}, {{ws, _}, _},
-         {{md, star}, _}, {{ws, _}, _},
-         {{md, star}, _}]                -> hr;
-        _Other ->
-            case List of
-                [{{md, star}, _},
-                 {{ws, _}, _}= WS | T] -> {ul, make_list_str([WS | T])};
-                _Other2                -> normal
-            end
+    case List of
+        [{{md, star}, _},
+         {{ws, _}, _}= WS | T] -> {ul, make_list_str([WS | T])};
+        _Other2                -> normal
     end.
 
 type_ol(List) ->
@@ -526,7 +522,7 @@ is_all_hashes(_List)                -> false.
 
 get_atx_size(List) -> g_atx_size1(List, 0).
 
-% this function also strips whitespace to the left...
+%% this function also strips whitespace to the left...
 g_atx_size1([{{md, atx}, _} = A | T], N) when N == 6 -> {6, [A | T]};
 g_atx_size1([{{md, atx}, _} | T], N)                 -> g_atx_size1(T, N + 1);
 g_atx_size1([{{ws, _}, _} | T], N)                   -> g_atx_size1(T, N);
@@ -558,9 +554,9 @@ type_ws1(_L)                  -> try_codeblock.
 %% (a tab is 4...)
 type_ws2([{{ws, tab}, _} | T])  -> {codeblock, T};
 type_ws2([{{ws, comp}, W} | T]) -> case gt(W, 4) of
-                                           {true, R} -> {codeblock, [R| T]};
-                                           false     -> normal
-                                       end;
+                                       {true, R} -> {codeblock, [R| T]};
+                                       false     -> normal
+                                   end;
 type_ws2([{{ws, sp}, _} | _T])  -> normal.
 
 gt(String, Len) ->
@@ -596,12 +592,6 @@ make_list_str([{{ws, _}, _} | T] = List) ->
                               {tags, "</code></pre>\n\n"} | []])
     end.
 
-trim_right(String) -> reverse(trim_left(reverse(String))).
-
-trim_left([{{ws, _}, _} | T]) -> trim_left(T);
-trim_left([[] | T])           -> trim_left(T);
-trim_left(List)               -> List.
-
 snip(List) -> List2 = reverse(List),
               case List2 of
                   [{{lf, _}, _} | T] -> lists:reverse(T);
@@ -627,6 +617,7 @@ snip(List) -> List2 = reverse(List),
 
 lex(String) ->
     RawTokens = l1(String, [], []),
+    io:format("RawTokens is ~p~n", [RawTokens]),
     merge_ws(RawTokens).
 
 merge_ws(List) -> m_ws1(List, []).
@@ -659,7 +650,7 @@ l1([$8 | T], A1, A2)       -> l1(T, [], [{num, "8"}, l2(A1) | A2]);
 l1([$9 | T], A1, A2)       -> l1(T, [], [{num, "9"}, l2(A1) | A2]);
 l1([$0 | T], A1, A2)       -> l1(T, [], [{num, "0"}, l2(A1) | A2]);
 l1([$. | T], A1, A2)       -> l1(T, [], [{{punc, fullstop}, "."}, l2(A1) | A2]);
- %"
+                                                %"
 l1([$` | T], A1, A2)       -> l1(T, [], [{{punc, backtick}, "`"}, l2(A1) | A2]); %"
 %% note there is a special 'whitespace' {{ws, none}, ""} which is used to generate non-space
 %% filling whitespace for cases like '*bob* is great' which needs a non-space filling
@@ -688,7 +679,7 @@ openingdiv(String) ->
             end
     end.
 
-% dumps out a list if it is not an opening div
+%% dumps out a list if it is not an opening div
 openingdiv1([], Acc)         -> {flatten([{{punc, bra}, "<"}
                                           | lex(reverse(Acc))]), []};
 openingdiv1([$/,$>| T], Acc) -> Acc2 = flatten(reverse(Acc)),
@@ -706,7 +697,7 @@ openingdiv1([$>| T], Acc)    -> Acc2 = flatten(reverse(Acc)),
                                   ++ Acc2 ++ ">"}, T};
 openingdiv1([H|T], Acc)      -> openingdiv1(T, [H | Acc]).
 
-% dumps out a list if it is not an closing div
+%% dumps out a list if it is not an closing div
 closingdiv([], Acc)     -> {flatten([{{punc, bra}, "<"},
                                      {{punc, fslash}, "/"}
                                      | lex(reverse(Acc))]), []};
@@ -725,7 +716,7 @@ get_url(String) -> HTTP_regex = "^(H|h)(T|t)(T|t)(P|p)(S|s)*://",
 
 get_url1([], Acc)            -> URL = flatten(reverse(Acc)),
                                 {{url, URL}, []};
-% allow escaped kets
+%% allow escaped kets
 get_url1([$\\, $> | T], Acc) -> get_url1(T, [$>, $\\ | Acc]);
 get_url1([$> | T], Acc)      -> URL = flatten(reverse(Acc)),
                                 {{url, URL}, T};
@@ -814,7 +805,7 @@ htmlchars1([?CR | T], Acc)           -> htmlchars1(T, ["\r" | Acc]);
 htmlchars1([$\\, $*, $*, $* | T], A) -> htmlchars1(T, [$*, $*, $* | A]);
 htmlchars1([$*, $*, $* | T], A)      -> {T2, NewA} = superstrong(T, $*),
                                         htmlchars1(T2, [NewA | A]);
-% repeat for strong
+%% repeat for strong
 htmlchars1([$\\, $*, $* | T], A)     -> htmlchars1(T, [$*, $* | A]);
 htmlchars1([$*, $* | T], A)          -> {T2, NewA} = strong(T, $*),
                                         htmlchars1(T2, [NewA | A]);
@@ -827,7 +818,7 @@ htmlchars1([$\\, $_, $_, $_ | T], A) -> htmlchars1(T, [$_, $_, $_ | A]);
 %% the none atom is the non-space filling whitespace
 htmlchars1([$_, $_, $_ | T], A)      -> {T2, NewA} = superstrong(T, $_),
                                         htmlchars1(T2, [NewA | A]);
-% and strong
+%% and strong
 %% and again for underscores
 htmlchars1([$\\, $_, $_ | T], A)     -> htmlchars1(T, [$_, $_ | A]);
 htmlchars1([$_, $_ | T], A)          -> {T2, NewA} = strong(T, $_),
@@ -865,7 +856,7 @@ interpolateX([], Delim, _Tag, _X, Acc) ->
     {[], [Delim] ++ htmlchars(reverse(Acc))};
 interpolateX([Delim | T], Delim, Tag, X, Acc) ->
     {T,  "<" ++ Tag ++ ">" ++ htmlchars(reverse(Acc)) ++ X ++
-     "</" ++ Tag ++ ">"};
+         "</" ++ Tag ++ ">"};
 interpolateX([H | T], Delim, Tag, X, Acc) ->
     interpolateX(T, Delim, Tag, X, [H | Acc]).
 
@@ -873,7 +864,7 @@ interpolate([], Delim, _Tag, _X, Acc) ->
     {[], [Delim] ++ htmlchars(reverse(Acc))};
 interpolate([Delim | T], Delim, Tag, X, Acc) ->
     {T,  "<" ++ Tag ++ ">" ++ htmlchars(reverse(Acc)) ++ X ++
-     "</" ++ Tag ++ ">"};
+         "</" ++ Tag ++ ">"};
 interpolate([H | T], Delim, Tag, X, Acc) ->
     interpolate(T, Delim, Tag, X, [H | Acc]).
 
@@ -882,7 +873,7 @@ interpolate2([], Delim, _Tag,  _X, Acc) ->
     {[], [Delim] ++ [Delim] ++ htmlchars(reverse(Acc))};
 interpolate2([Delim, Delim | T], Delim, Tag, X, Acc) ->
     {T,  "<" ++ Tag ++ ">" ++ htmlchars(reverse(Acc)) ++ X ++
-     "</" ++ Tag ++ ">"};
+         "</" ++ Tag ++ ">"};
 interpolate2([H | T], Delim, Tag, X, Acc) ->
     interpolate2(T, Delim, Tag, X, [H | Acc]).
 
