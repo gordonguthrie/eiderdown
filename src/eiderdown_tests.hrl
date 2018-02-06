@@ -155,33 +155,38 @@ unit_test_() ->
                    conv("blah \n<a href=\"link\">link</a> blah")),
      ?_assertEqual("<p>blah</p>\n<a href=\"link\">\n<p>link</p>\n</a>\n<p>blah</p>",
                    conv("blah \n<a href=\"link\">\nlink\n</a>\n blah")),
-     ?_assertEqual("<p>&lt;random&gt;</p>", conv("<random>")),
-     ?_assertEqual("<p>erk&lt;random&gt;</p>", conv("erk<random>")),
+     ?_assertEqual("<p>&lt;random&gt;</p>",
+                   conv("<random>")),
+     ?_assertEqual("<p>erk&lt;random&gt;</p>",
+                   conv("erk<random>")),
      ?_assertEqual("<p>erk&lt;random&gt;bnajo&lt;/random&gt;</p>",
                    conv("erk<random>bnajo</random>")),
 
      %% naughty elements
 
-     %% ?_assertEqual("<p>blah</p>\n<p><span>erk</p></span> blah</p>",
-     %%              conv("blah \n"
-     %%                   "<span>erk\n"
-     %%                   "</span> blah")),
-     %%     ?_assertEqual("<p>blah <span>erk</span> blah</p>",
-     %%                   conv("blah \n<span>\nerk\n</span> blah")),
-     %%     ?_assertEqual("<p>blah <a href=\"link\">link</a> blah</p>",
-     %%                   conv("blah <a \nhref=\"link\">link</a> blah")),
-     %% ?_assertEqual("<p>blah <img src=\"image.png\"> blah</p>",
-     %%              conv("blah \n<img \nsrc=\"image.png\"> blah")),
-     %% ?_assertEqual(""),
-     %%              conv("blah<\a>")),
-     %% ?_assertEqual(""),
-     %%              conv("blah<\img>")),
-     %% ?_assertEqual(""),
-     %%              conv("blah<span>sfdsfsa\n")),
-     %% ?_assertEqual(""),
-     %%              conv("blah<a>asfds\n")),
-     %% ?_assertEqual(""),
-     %%              conv("blah</a fandiid>asfds\n")),
+     ?_assertEqual("<p>blah</p>\n<p><span>erk</p>\n<p></span> blah</p>",
+                   conv("blah \n"
+                        "<span>erk\n"
+                        "</span> blah")),
+     ?_assertEqual("<p>blah</p>\n<span>\n<p>erk</p>\n<p></span> blah</p>",
+                   conv("blah \n<span>\nerk\n</span> blah")),
+     ?_assertEqual("<p>blah <a \nhref=\"link\">link</a> blah</p>",
+                   conv("blah <a \nhref=\"link\">link</a> blah")),
+     ?_assertEqual("<p>blah</p>\n<p><img src=\"image.png\"> blah</p>",
+                   conv("blah \n<img src=\"image.png\"> blah")),
+     ?_assertEqual("<p>blah</p>\n<p><img \nsrc=\"image.png\"> blah</p>",
+                   conv("blah \n<img \nsrc=\"image.png\"> blah")),
+     ?_assertEqual("<p>blah</p>\n<img \nsrc=\"image.png\">\n<p>blah</p>",
+                   conv("blah \n<img \nsrc=\"image.png\">\n blah")),
+     ?_assertEqual("<p>blah</p>\n</a>",
+                   conv("blah\n</a>")),
+     ?_assertEqual("<p>blah</img></p>",
+                   conv("blah</img>")),
+     ?_assertEqual("<p>blah</a>asfds</p>",
+                   conv("blah</a fandiid>asfds\n")),
+     ?_assertEqual("<img src=\"deffo\" squid>",
+                   conv("<img src=\"deffo\" squid>")),
+
 
      %% bold/italic/code tests
 

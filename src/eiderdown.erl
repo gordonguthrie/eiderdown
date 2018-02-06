@@ -27,7 +27,6 @@
 
 -record(ast, {
           type         :: atom(),
-          padding = 0  :: integer(),
           content = [] :: list()
          }).
 
@@ -113,14 +112,12 @@ make_html([#ast{type    = {heading, N},
         ++ "</h" ++ integer_to_list(N) ++ ">\n",
     make_html(T, [HTML | Acc]);
 make_html([#ast{type    = ol,
-                padding = I,
                 content = Lis} | T], Acc) ->
-    HTML = "<ol>\n" ++ make_list_html(Lis, I, []) ++ "</ol>\n",
+    HTML = "<ol>\n" ++ make_list_html(Lis, []) ++ "</ol>\n",
     make_html(T, [HTML | Acc]);
 make_html([#ast{type    = ul,
-                padding = I,
                 content = Lis} | T], Acc) ->
-    HTML = "<ul>\n" ++ make_list_html(Lis, I, []) ++ "</ul>\n",
+    HTML = "<ul>\n" ++ make_list_html(Lis, []) ++ "</ul>\n",
     make_html(T, [HTML | Acc]);
 make_html([#ast{type    = {code, none},
                 content = Text} | T], Acc) ->
@@ -136,10 +133,10 @@ make_html([#ast{type    = tag,
 make_html([Text | T], Acc) ->
     make_html(T, [Text | Acc]).
 
-make_list_html([], _Padding, Acc) -> lists:reverse(Acc);
+make_list_html([], Acc) -> lists:reverse(Acc);
 make_list_html([#ast{type    = li,
-                     content = C} | T], Padding, Acc) ->
-    make_list_html(T, Padding, [make_lis(C) | Acc]).
+                     content = C} | T], Acc) ->
+    make_list_html(T, [make_lis(C) | Acc]).
 
 make_lis(Text) -> "<li>" ++ Text ++ "</li>\n".
 
@@ -150,93 +147,81 @@ make_lis(Text) -> "<li>" ++ Text ++ "</li>\n".
 %%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% 'I' is the indent level
-parse(TypedLines) -> p1(TypedLines, 0, []).
+parse(TypedLines) -> p1(TypedLines, []).
 
 
 %% Terminal clause
-p1([], _I, Acc)    -> reverse(Acc);
+p1([], Acc)    -> reverse(Acc);
 
 %% Tags have the highest precedence...
-p1([{tag, Tag} | T], I, Acc) ->
+p1([{tag, Tag} | T], Acc) ->
     case T of
-        []                -> p1([], I,
-                                [#ast{type    = tag,
-                                      content = make_tag_str(Tag)} | Acc]);
-        [{blank, _} | T2] -> p1(T2, I,
-                                [#ast{type    = tag,
-                                      content = make_tag_str(Tag)} | Acc]);
-        _Other            -> p1(T, I,
-                                [#ast{type    = tag,
-                                      padding = I,
-                                      content = make_tag_str(Tag)} | Acc])
+        []                -> p1([], [#ast{type    = tag,
+                                          content = make_tag_str(Tag)} | Acc]);
+        [{blank, _} | T2] -> p1(T2, [#ast{type    = tag,
+                                          content = make_tag_str(Tag)} | Acc]);
+        _Other            -> p1(T, [#ast{type    = tag,
+                                         content = make_tag_str(Tag)} | Acc])
     end;
 
-p1([{blocktag, [{{{tag, open}, Type}, Tg}] = _Tag} | T], I, Acc) ->
+p1([{blocktag, [{{{tag, open}, Type}, Tg}] = _Tag} | T], Acc) ->
     {Block, Rest} = grab_for_blockhtml(T, Type, []),
     Str = lists:flatten([Tg, "\n" | Block]),
-    p1(Rest, I, [Str | Acc]);
+    p1(Rest, [Str | Acc]);
 
 %% blank lines/linefeeds are gobbled down and discarded
-p1([{Type, _} | T], I, Acc)
+p1([{Type, _} | T], Acc)
   when Type == blank orelse Type == linefeed ->
     Rest = grab_empties(T),
-    p1(Rest, I, Acc);
+    p1(Rest, Acc);
 
 %% one normal is just normal...
-p1([{normal, P} | T], I, Acc) ->
+p1([{normal, P} | T], Acc) ->
     P2 = string:strip(make_str(snip(P)), both, ?SPACE),
-    p1(T, I, [#ast{type = para, padding = I, content = P2} | Acc]);
+        p1(T, [#ast{type    = para,
+                content = P2} | Acc]);
 
 %% atx headings
-p1([{{h1, P}, _} | T], I, Acc) ->
+p1([{{h1, P}, _} | T], Acc) ->
     NewP = string:strip(make_str(snip(P)), right),
-    p1(T, I,  [#ast{type    = {heading, 1},
-                    padding = I,
-                    content = NewP} | Acc]);
-p1([{{h2, P}, _} | T], I, Acc) ->
+    p1(T,  [#ast{type    = {heading, 1},
+                 content = NewP} | Acc]);
+p1([{{h2, P}, _} | T], Acc) ->
     NewP = string:strip(make_str(snip(P)), right),
-    p1(T, I,  [#ast{type    = {heading, 2},
-                    padding = I,
-                    content = NewP} | Acc]);
-p1([{{h3, P}, _} | T], I, Acc) ->
+    p1(T,  [#ast{type    = {heading, 2},
+                 content = NewP} | Acc]);
+p1([{{h3, P}, _} | T], Acc) ->
     NewP = string:strip(make_str(snip(P)), right),
-    p1(T, I,  [#ast{type    = {heading, 3},
-                    padding = I,
-                    content = NewP} | Acc]);
-p1([{{h4, P}, _} | T], I, Acc) ->
+    p1(T,  [#ast{type    = {heading, 3},
+                 content = NewP} | Acc]);
+p1([{{h4, P}, _} | T], Acc) ->
     NewP = string:strip(make_str(snip(P)), right),
-    p1(T, I,  [#ast{type    = {heading, 4},
-                    padding = I,
-                    content = NewP} | Acc]);
-p1([{{h5, P}, _} | T], I, Acc) ->
+    p1(T,  [#ast{type    = {heading, 4},
+                 content = NewP} | Acc]);
+p1([{{h5, P}, _} | T], Acc) ->
     NewP = string:strip(make_str(snip(P)), right),
-    p1(T, I,  [#ast{type    = {heading, 5},
-                    padding = I,
-                    content = NewP} | Acc]);
-p1([{{h6, P}, _} | T], I, Acc) ->
+    p1(T,  [#ast{type    = {heading, 5},
+                 content = NewP} | Acc]);
+p1([{{h6, P}, _} | T], Acc) ->
     NewP = string:strip(make_str(snip(P)), right),
-    p1(T, I,  [#ast{type    = {heading, 6},
-                    padding = I,
-                    content = NewP} | Acc]);
+    p1(T,  [#ast{type    = {heading, 6},
+                 content = NewP} | Acc]);
 
 %% grab all the unordered lists
-p1([{Type, _} | _T] = List, I, Acc) when Type == ul orelse
+p1([{Type, _} | _T] = List, Acc) when Type == ul orelse
                                          Type == ol ->
     {ULs, NewT} = grab_list_items(List, Type, []),
     NewC = [#ast{type    = li,
-                 padding = get_padding(X),
                  content = make_str(snip(make_list_str(X)))}
             || {_Type, X} <- ULs],
-    p1(NewT, I,  [#ast{type    = Type,
-                       padding = I,
-                       content = NewC} | Acc]);
+    p1(NewT,  [#ast{type    = Type,
+                    content = NewC} | Acc]);
 
 %% codeblock consumes any following empty lines
 %% and other codeblocks
-p1([{{codeblock, P1}, S1}, {{codeblock, P2}, S2} | T], I, Acc) ->
-    p1([{{codeblock, merge(P1, pad(I), P2)}, S1 ++ S2} | T], I, Acc);
-p1([{{codeblock, P}, _} | T], I, Acc) ->
+p1([{{codeblock, P1}, S1}, {{codeblock, P2}, S2} | T], Acc) ->
+    p1([{{codeblock, merge(P1, P2)}, S1 ++ S2} | T], Acc);
+p1([{{codeblock, P}, _} | T], Acc) ->
     Type = case P of
                [{string, ""}]    -> {code, none};
                [{string, Class}] -> {code, Class}
@@ -244,7 +229,7 @@ p1([{{codeblock, P}, _} | T], I, Acc) ->
     {Content, Rest} = grab_for_codeblock(T, []),
     AST = #ast{type    = Type,
                content = Content},
-    p1(Rest, I, [AST | Acc]).
+    p1(Rest, [AST | Acc]).
 
 grab_list_items([], _Type, Acc) ->
     {lists:reverse(Acc), []};
@@ -286,16 +271,8 @@ grab_empties([{linefeed, _} | T]) -> grab_empties(T);
 grab_empties([{blank, _} | T])    -> grab_empties(T);
 grab_empties(List)                -> List.
 
-merge(P1, Pad, P2) ->
-    flatten([P1, {string, Pad} | P2]).
-
-pad(N) -> pad1(N, []).
-
-pad1(0, Acc)            -> Acc;
-pad1(N, Acc) when N > 0 -> pad1(N - 1, ["  " | Acc]).
-
-get_padding([{{ws, _, N}, _} | _T]) -> N;
-get_padding(_)                      -> 0.
+merge(P1, P2) ->
+    flatten([P1 | P2]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%
@@ -701,7 +678,6 @@ m_str1([], A) ->
 m_str1([{tags, _} = Tag | T], A) ->
     m_str1(T, [Tag | A]);
 m_str1([{{{tag, Type}, Tag}, Contents} | T], A) ->
-    io:format("in m_str1 for ~p with ~p~n", [is_inline_tag(Tag), Contents]),
     C = strip_div(Tag, Type, Contents),
     Tag2 = esc_tag(Tag),
     TagStr = case is_inline_tag(Tag) of
