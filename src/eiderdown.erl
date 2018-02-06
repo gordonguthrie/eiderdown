@@ -89,14 +89,11 @@ write(File, Text) ->
             error
     end.
 
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%
-%%% Parse the lines interpolating the references as appropriate
+%%% make_html
 %%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-parse(TypedLines) -> p1(TypedLines, 0, []).
 
 make_html(AST) -> make_html(AST, []).
 
@@ -137,41 +134,25 @@ make_html([#ast{type    = tag,
                 content = Text} | T], Acc) ->
     make_html(T, [Text | Acc]);
 make_html([Text | T], Acc) ->
-    %% gg:format("Text is ~p~n", [Text]),
     make_html(T, [Text | Acc]).
 
 make_list_html([], _Padding, Acc) -> lists:reverse(Acc);
 make_list_html([#ast{type    = li,
-                     padding = P,
                      content = C} | T], Padding, Acc) ->
-    {NewA, NewT} = if
-                       P > Padding  ->
-                           {Lis, Rest} = collect(T, P, [], []),
-                           LisHTML = make_lis([C | Lis]),
-                           HTML = lists:flatten("<ul>"
-                                                ++ LisHTML
-                                                ++ "</ul>"),
-                           {HTML, Rest};
-                       P =< Padding ->
-                           {make_lis([C]), T}
-                   end,
-    make_list_html(NewT, Padding, [NewA | Acc]);
-make_list_html([#ast{type    = html,
-                     content = HTML} | T], Padding, Acc) ->
-    make_list_html(T, Padding, [HTML | Acc]).
+    make_list_html(T, Padding, [make_lis(C) | Acc]).
 
-make_lis(Lis) -> ["<li>" ++ X ++ "</li>\n" || X <- Lis].
-
-collect([], _P, Acc1, Acc2) ->
-    {lists:reverse(Acc1), lists:reverse(Acc2)};
-collect([#ast{padding = P} = H | T], P, Acc1, Acc2) ->
-    collect(T, P, [H | Acc1], Acc2);
-collect([H | T], P, Acc1, Acc2) ->
-    collect(T, P, Acc1, [H | Acc2]).
+make_lis(Text) -> "<li>" ++ Text ++ "</li>\n".
 
 
-%% goes through the lines
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%%% Parse the lines
+%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 %% 'I' is the indent level
+parse(TypedLines) -> p1(TypedLines, 0, []).
+
 
 %% Terminal clause
 p1([], _I, Acc)    -> reverse(Acc);
@@ -429,10 +410,10 @@ is_blank(_List)                  -> false.
 is_block_tag("div")   -> true;
 is_block_tag(_)       -> false.
 
-is_inline_tag("span")  -> true;
-is_inline_tag("image") -> true;
-is_inline_tag("a")     -> true;
-is_inline_tag(_)       -> false.
+is_inline_tag("span") -> true;
+is_inline_tag("img")  -> true;
+is_inline_tag("a")    -> true;
+is_inline_tag(_)      -> false.
 
 type_star(List) ->
     case List of
@@ -580,7 +561,7 @@ snip(List) -> List2 = reverse(List),
 
 lex(String) ->
     RawTokens = l1(String, [], []),
-    % io:format("RawTokens is ~p~n", [RawTokens]),
+    %% io:format("RawTokens is ~p~n", [RawTokens]),
     merge_ws(RawTokens).
 
 merge_ws(List) -> m_ws1(List, []).
@@ -719,16 +700,37 @@ m_str1([], A) ->
     htmlchars(Flat);
 m_str1([{tags, _} = Tag | T], A) ->
     m_str1(T, [Tag | A]);
-m_str1([{{{tag, Type}, Tag}, _} | T], A) ->
+m_str1([{{{tag, Type}, Tag}, Contents} | T], A) ->
+    io:format("in m_str1 for ~p with ~p~n", [is_inline_tag(Tag), Contents]),
+    C = strip_div(Tag, Type, Contents),
     Tag2 = esc_tag(Tag),
-    TagStr = case Type of
-                 open         -> {tags, "&lt;"  ++ Tag2 ++ "&gt;"};
-                 close        -> {tags, "&lt;/" ++ Tag2 ++ "&gt;"};
-                 self_closing -> {tags, "&lt;"  ++ Tag2 ++ " /&gt;"}
+    TagStr = case is_inline_tag(Tag) of
+                 true  -> case Type of
+                              open         -> {tags, "<"  ++ Tag2 ++ C ++ ">"};
+                              close        -> {tags, "</" ++ Tag2 ++      ">"};
+                              self_closing -> {tags, "<"  ++ Tag2 ++ C ++ " />;"}
+                          end;
+                 false -> case Type of
+                              open         -> {tags, "&lt;"  ++ Tag2 ++ C ++ "&gt;"};
+                              close        -> {tags, "&lt;/" ++ Tag2 ++ C ++ "&gt;"};
+                              self_closing -> {tags, "&lt;"  ++ Tag2 ++ C ++ " /&gt;;"}
+                         end
              end,
     m_str1(T, [TagStr | A]);
 m_str1([{_, Orig} | T], A)  ->
     m_str1(T, [Orig | A]).
+
+strip_div(Tag, open, Contents) ->
+    Len    = length(Tag),
+    Left   = string:left(Contents, length(Contents) - 1),
+    _Right = string:right(Left,    length(Left) - (Len + 1));
+strip_div(Tag, self_closing, Contents) ->
+    Len   = length(Tag),
+    Left  = string:left(Contents, length(Contents) - 2),
+    _Right = string:right(Left,   length(Left) - (Len + 1));
+%% closing tags can't contain content
+strip_div(_Tag, close, _Contents) ->
+    "".
 
 %% convert ascii into html characters
 %% htmlencode(List) ->
