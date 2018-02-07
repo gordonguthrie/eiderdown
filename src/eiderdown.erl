@@ -9,9 +9,12 @@
 
 -module(eiderdown).
 
--export([conv/1,
-         conv_utf8/1,
-         conv_file/2]).
+-export([
+         to_html/1,
+         to_html_from_utf8/1,
+         to_html_from_file/2,
+         to_summary_from_utf8/1
+        ]).
 
 -import(lists, [flatten/1, reverse/1]).
 
@@ -45,27 +48,28 @@
 %%%   - ordered lists
 %%%   - code blocks
 %%% the parser then does its magic interpolating the references as appropriate
-conv(String) -> Lex = lex(String),
-                %% io:format("Lex is ~p~n", [Lex]),
-                UntypedLines = make_lines(Lex),
-                %% io:format("UntypedLines are ~p~n", [UntypedLines]),
-                TypedLines = type_lines(UntypedLines),
-                %% io:format("TypedLines are ~p~n", [TypedLines]),
-                AST = parse(TypedLines),
-                %% io:format("in parse AST is ~p~n", [AST]),
-                HTML = make_html(AST),
-                string:strip(HTML, both, $\n).
+to_html(String) ->
+    Lex = lex(String),
+    %% io:format("Lex is ~p~n", [Lex]),
+    UntypedLines = make_lines(Lex),
+    %% io:format("UntypedLines are ~p~n", [UntypedLines]),
+    TypedLines = type_lines(UntypedLines),
+    %% io:format("TypedLines are ~p~n", [TypedLines]),
+    AST = parse(TypedLines),
+    %% io:format("in parse AST is ~p~n", [AST]),
+    HTML = make_html(AST),
+    string:strip(HTML, both, $\n).
 
--spec conv_utf8(list()) -> list().
-conv_utf8(Utf8) ->
+-spec to_html_from_utf8(list()) -> list().
+to_html_from_utf8(Utf8) ->
     Str = xmerl_ucs:from_utf8(Utf8),
-    Res = conv(Str),
+    Res = to_html(Str),
     xmerl_ucs:to_utf8(Res).
 
-conv_file(FileIn, FileOut) ->
+to_html_from_file(FileIn, FileOut) ->
     case file:open(FileIn, [read]) of
         {ok, Device} -> Input = get_all_lines(Device,[]),
-                        Output = conv(Input),
+                        Output = to_html(Input),
                         write(FileOut, Output);
         _            -> error
     end.
@@ -87,6 +91,84 @@ write(File, Text) ->
         _ ->
             error
     end.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%%% make_summary
+%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+to_summary_from_utf8(String) ->
+    Lex = lex(String),
+    %% io:format("Lex is ~p~n", [Lex]),
+    UntypedLines = make_lines(Lex),
+    %% io:format("UntypedLines are ~p~n", [UntypedLines]),
+    TypedLines = type_lines(UntypedLines),
+    %% io:format("TypedLines are ~p~n", [TypedLines]),
+    Summary = make_summary(TypedLines),
+    %% io:format("Summary is ~p~n", [Summary]),
+    AST = parse(Summary),
+    %% io:format("in parse AST is ~p~n", [AST]),
+    HTML = make_html(AST),
+    string:strip(HTML, both, $\n).
+
+make_summary(AST) ->
+    make_s1(AST, []).
+
+make_s1([], Acc)                  -> lists:flatten(lists:reverse(Acc));
+make_s1([{linefeed, _} | T], Acc) -> make_s1(T, Acc);
+make_s1([{blocktag, P} | T], Acc) -> NewAcc = summarise_blocktag(P),
+                                     make_s1(T, [NewAcc | Acc]);
+make_s1([{normal, P} | T],   Acc) -> NewAcc = summarise_para(P),
+                                     make_s1(T, [NewAcc | Acc]);
+make_s1([H | T], Acc)             -> io:format("H is ~p~n", [H]),
+                                     make_s1(T, [H | Acc]).
+
+summarise_blocktag(Para) ->
+    Strings = [{string, "`" ++ Contents ++ "`"}
+               || {{{_, _}, _}, Contents} <- Para],
+    {normal, Strings}.
+
+summarise_para(Para) ->
+    Words = count_words(Para, 0),
+    Tags = [X || {{{tag, _}, _}, _} = X <- Para],
+    {GoodTags, BadTags} = sort_tags(Tags, [], []),
+
+    GTags = case GoodTags of
+                [] -> "";
+                _  -> "good tags :\n" ++make_list(GoodTags)
+            end,
+    BTags = case BadTags of
+                [] -> "";
+                _  -> "bad tags  :\n" ++ make_list(BadTags)
+            end,
+    Text = "para      : " ++ integer_to_list(Words) ++ " words\n",
+    String = string:strip(Text ++ GTags ++ BTags, right, $\n),
+    {normal, [{string, String}]}.
+
+make_list(List) ->
+    Lines = [Contents || {{{tag, _Type}, _Tag}, Contents} <- List],
+    %% we wrap the text in a pair of backtigs so it will render as
+    %% code later down the line
+    Stripped = ["`" ++ Text ++ "`\n" || Text <- Lines],
+    lists:flatten(Stripped).
+
+sort_tags([], Acc1, Acc2) ->
+    {lists:reverse(Acc1), lists:reverse(Acc2)};
+sort_tags([{{{tag, open},  Tag}, _} = H1,
+           {{{tag, close}, Tag}, _} | T], Acc1, Acc2) ->
+    sort_tags(T, [H1 | Acc1], Acc2);
+sort_tags([{{{tag, self_closing}, _}, _} = H | T], Acc1, Acc2) ->
+    sort_tags(T, [H | Acc1], Acc2);
+sort_tags([H | T], Acc1, Acc2) ->
+    sort_tags(T, Acc1, [H | Acc2]).
+
+count_words([], N)                -> N;
+count_words([{string, S} | T], N) -> Words = get_words(S),
+                                     count_words(T, N + Words);
+count_words([_H | T], N)          -> count_words(T, N).
+
+get_words(String) -> length(string:tokens(String, " ")).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%
@@ -178,7 +260,7 @@ p1([{Type, _} | T], Acc)
 %% one normal is just normal...
 p1([{normal, P} | T], Acc) ->
     P2 = string:strip(make_str(snip(P)), both, ?SPACE),
-        p1(T, [#ast{type    = para,
+    p1(T, [#ast{type    = para,
                 content = P2} | Acc]);
 
 %% atx headings
@@ -209,7 +291,7 @@ p1([{{h6, P}, _} | T], Acc) ->
 
 %% grab all the unordered lists
 p1([{Type, _} | _T] = List, Acc) when Type == ul orelse
-                                         Type == ol ->
+                                      Type == ol ->
     {ULs, NewT} = grab_list_items(List, Type, []),
     NewC = [#ast{type    = li,
                  content = make_str(snip(make_list_str(X)))}
@@ -681,20 +763,26 @@ m_str1([{{{tag, Type}, Tag}, Contents} | T], A) ->
     C = strip_div(Tag, Type, Contents),
     Tag2 = esc_tag(Tag),
     TagStr = case is_inline_tag(Tag) of
-                 true  -> case Type of
-                              open         -> {tags, "<"  ++ Tag2 ++ C ++ ">"};
-                              close        -> {tags, "</" ++ Tag2 ++      ">"};
-                              self_closing -> {tags, "<"  ++ Tag2 ++ C ++ " />;"}
-                          end;
-                 false -> case Type of
-                              open         -> {tags, "&lt;"  ++ Tag2 ++ C ++ "&gt;"};
-                              close        -> {tags, "&lt;/" ++ Tag2 ++ C ++ "&gt;"};
-                              self_closing -> {tags, "&lt;"  ++ Tag2 ++ C ++ " /&gt;;"}
-                         end
+                 true  -> make_tag(Type, Tag2, C);
+                 false -> make_esc_tag(Type, Tag2, C)
              end,
     m_str1(T, [TagStr | A]);
 m_str1([{_, Orig} | T], A)  ->
     m_str1(T, [Orig | A]).
+
+make_tag(open, Tag, Content) ->
+    {tags, "<" ++ Tag ++ Content ++ ">"};
+make_tag(close, Tag, _Content) ->
+    {tags, "</" ++ Tag ++ ">"};
+make_tag(self_closing, Tag, Content) ->
+    {tags, "<" ++ Tag ++ Content ++ " />;"}.
+
+make_esc_tag(open, Tag, Content) ->
+    {tags, "&lt;" ++ Tag ++ Content ++ "&gt;"};
+make_esc_tag(close, Tag, _Content) ->
+    {tags, "&lt;/" ++ Tag ++ "&gt;"};
+make_esc_tag(self_closgin, Tag, Content) ->
+    {tags, "&lt;" ++ Tag ++ Content ++ " /&gt;"}.
 
 strip_div(Tag, open, Contents) ->
     Len    = length(Tag),
