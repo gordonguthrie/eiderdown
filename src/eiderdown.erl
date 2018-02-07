@@ -121,8 +121,7 @@ make_s1([{blocktag, P} | T], Acc) -> NewAcc = summarise_blocktag(P),
                                      make_s1(T, [NewAcc | Acc]);
 make_s1([{normal, P} | T],   Acc) -> NewAcc = summarise_para(P),
                                      make_s1(T, [NewAcc | Acc]);
-make_s1([H | T], Acc)             -> io:format("H is ~p~n", [H]),
-                                     make_s1(T, [H | Acc]).
+make_s1([H | T], Acc)             -> make_s1(T, [H | Acc]).
 
 summarise_blocktag(Para) ->
     Strings = [{string, "`" ++ Contents ++ "`"}
