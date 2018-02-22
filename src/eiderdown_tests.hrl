@@ -1,3 +1,12 @@
+-define(OPTS, [
+                 #optional_tag{tag        = "quote",
+                               classnames = "my classes",
+                               scope      = html},
+                 #optional_tag{tag        = "todo",
+                               classnames = "more classes",
+                               scope      = review}
+                ]).
+
 unit_test_() ->
     [
      %% simple tests
@@ -7,7 +16,10 @@ unit_test_() ->
      ?_assertEqual("<p>&lt;=</p>", to_html("<=")),
      ?_assertEqual("<p>&lt;></p>", to_html("<>")),
      ?_assertEqual("<p>&copy;</p>", to_html("&copy;")),
-     ?_assertEqual("<div>\nerk\n</div>", to_html("<div>\nerk\n</div>")),
+     ?_assertEqual("<div>\n<p>erk</p>\n</div>\n<p>gah</p>",
+                   to_html("<div>\nerk\n</div>\ngah")),
+     ?_assertEqual("<div class='danjo'>\n<p>erk</p>\n</div>\n<p>gah</p>",
+                   to_html("<div class='danjo'>\nerk\n</div>\ngah")),
      ?_assertEqual("<p>blah &lt;div&gt;erk&lt;/div&gt; blah</p>",
                    to_html("blah <div>erk</div> blah")),
      ?_assertEqual("<p>blah</p>\n<p>bleh</p>", to_html("blah\n\n\nbleh")),
@@ -416,6 +428,28 @@ unit_test_() ->
                    "<p>para      : 1 words</p>\n"
                    "<p><code>&lt;/div></code></p>\n"
                    "<p>para      : 1 words</p>",
-                   to_summary_from_utf8("a\n<div>\nb\n</div>\nc"))
+                   to_summary_from_utf8("a\n<div>\nb\n</div>\nc")),
+
+     %%
+     %% Start testing optional tags
+     %%
+
+      ?_assertEqual("<p>:comment fish</p>\n"
+                   "<p>rando</p>",
+                   to_html(":comment fish\nrando", [])),
+
+     ?_assertEqual("<p class='my classes'>fish</p>\n"
+                   "<p>rando</p>",
+                   to_html(":quote fish\nrando", ?OPTS, html)),
+
+     ?_assertEqual("<p>:belch fish</p>\n<p>rando</p>",
+                   to_html(":belch fish\nrando", ?OPTS, html)),
+
+     ?_assertEqual("<p>rando</p>",
+                   to_html(":todo fish\nrando", ?OPTS, html)),
+
+     ?_assertEqual("<p class='more classes'>fish</p>\n"
+                   "<p>rando</p>",
+                   to_html(":todo fish\nrando", ?OPTS, review))
 
     ].

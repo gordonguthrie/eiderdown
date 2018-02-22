@@ -11,9 +11,18 @@
 
 -export([
          to_html/1,
+         to_html/2,
+         to_html/3,
          to_html_from_utf8/1,
+         to_html_from_utf8/2,
+         to_html_from_utf8/3,
          to_html_from_file/2,
-         to_summary_from_utf8/1
+         to_html_from_file/3,
+         to_html_from_file/4,
+         to_summary_from_utf8/1,
+         to_summary_from_utf8/2
+         %%         to_reviewable/1,
+         %%         to_reviewable_from_utf8/1
         ]).
 
 -import(lists, [flatten/1, reverse/1]).
@@ -28,10 +37,17 @@
 -define(AMP, $&, $a, $m, $p, $;).
 -define(COPY, $&, $c, $o, $p, $y, $;).
 
+
+%% Internal record
 -record(ast, {
-          type         :: atom(),
-          content = [] :: list()
+          type              :: atom(),
+          content    = []   :: list(),
+          classnames = []   :: string(),
+          scope      = html :: html | preview
          }).
+
+%% Shared records
+-include("eiderdown.hrl").
 
 %%% the lexer first lexes the input
 %%% make_lines does 2 passes:
@@ -49,27 +65,48 @@
 %%%   - code blocks
 %%% the parser then does its magic interpolating the references as appropriate
 to_html(String) ->
+    to_html(String, []).
+
+to_html(String, []) ->
+    to_html(String, [], html).
+
+to_html(String, OptionalTags, Scope)  when Scope == html orelse
+                                           Scope == review ->
+    %% io:format("String is ~p~n", [String]),
     Lex = lex(String),
     %% io:format("Lex is ~p~n", [Lex]),
     UntypedLines = make_lines(Lex),
     %% io:format("UntypedLines are ~p~n", [UntypedLines]),
-    TypedLines = type_lines(UntypedLines),
+    TypedLines = type_lines(UntypedLines, OptionalTags),
     %% io:format("TypedLines are ~p~n", [TypedLines]),
     AST = parse(TypedLines),
     %% io:format("in parse AST is ~p~n", [AST]),
-    HTML = make_html(AST),
+    HTML = make_html(AST, Scope),
     string:strip(HTML, both, $\n).
 
 -spec to_html_from_utf8(list()) -> list().
 to_html_from_utf8(Utf8) ->
+    to_html_from_utf8(Utf8, []).
+
+to_html_from_utf8(Utf8, []) ->
+    to_html_from_utf8(Utf8, [], html).
+
+
+to_html_from_utf8(Utf8, OptionalTags, Scope) ->
     Str = xmerl_ucs:from_utf8(Utf8),
-    Res = to_html(Str),
+    Res = to_html(Str, OptionalTags, Scope),
     xmerl_ucs:to_utf8(Res).
 
 to_html_from_file(FileIn, FileOut) ->
+    to_html_from_file(FileIn, FileOut, []).
+
+to_html_from_file(FileIn, FileOut, [])->
+    to_html_from_file(FileIn, FileOut, [], html).
+
+to_html_from_file(FileIn, FileOut, OptionalTags, Scope) ->
     case file:open(FileIn, [read]) of
         {ok, Device} -> Input = get_all_lines(Device,[]),
-                        Output = to_html(Input),
+                        Output = to_html(Input, OptionalTags, Scope),
                         write(FileOut, Output);
         _            -> error
     end.
@@ -99,17 +136,20 @@ write(File, Text) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 to_summary_from_utf8(String) ->
+    to_summary_from_utf8(String, []).
+
+to_summary_from_utf8(String, OptionalTags) ->
     Lex = lex(String),
     %% io:format("Lex is ~p~n", [Lex]),
     UntypedLines = make_lines(Lex),
     %% io:format("UntypedLines are ~p~n", [UntypedLines]),
-    TypedLines = type_lines(UntypedLines),
+    TypedLines = type_lines(UntypedLines, OptionalTags),
     %% io:format("TypedLines are ~p~n", [TypedLines]),
     Summary = make_summary(TypedLines),
     %% io:format("Summary is ~p~n", [Summary]),
     AST = parse(Summary),
     %% io:format("in parse AST is ~p~n", [AST]),
-    HTML = make_html(AST),
+    HTML = make_html(AST, review),
     string:strip(HTML, both, $\n).
 
 make_summary(AST) ->
@@ -175,44 +215,59 @@ get_words(String) -> length(string:tokens(String, " ")).
 %%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-make_html(AST) -> make_html(AST, []).
+make_html(AST, Type) ->
+    NewAST = filter_ast(AST, Type),
+    %% io:format("NewAST is ~p~n", [NewAST]),
+    make_html2(NewAST, []).
 
-make_html([], Acc) ->
+%% everything stays in if we are in review
+filter_ast(AST, review) -> AST;
+filter_ast(AST, html)   -> [X || X <- AST, X == X#ast{scope = html}].
+
+make_html2([], Acc) ->
     flatten(reverse(Acc));
-make_html([#ast{type    = html,
-                content = HTML} | T], Acc) ->
-    make_html(T, [HTML | Acc]);
-make_html([#ast{type    = para,
-                content = Text} | T], Acc) ->
-    HTML = "<p>" ++ Text ++ "</p>\n",
-    make_html(T, [HTML | Acc]);
-make_html([#ast{type    = {heading, N},
-                content = Text} | T], Acc) ->
+make_html2([#ast{type    = html,
+                 content = HTML} | T], Acc) ->
+    make_html2(T, [HTML | Acc]);
+make_html2([#ast{type       = para,
+                 content    = Text,
+                 classnames = CNames} | T], Acc) ->
+    HTML = case CNames of
+               [] -> "<p>" ++ Text ++ "</p>\n";
+               _  -> "<p class='" ++ CNames ++ "'>" ++ Text ++ "</p>\n"
+           end,
+    make_html2(T, [HTML | Acc]);
+make_html2([#ast{type    = {heading, N},
+                 content = Text} | T], Acc) ->
     HTML = "<h" ++ integer_to_list(N) ++ ">"
         ++ Text
         ++ "</h" ++ integer_to_list(N) ++ ">\n",
-    make_html(T, [HTML | Acc]);
-make_html([#ast{type    = ol,
-                content = Lis} | T], Acc) ->
+    make_html2(T, [HTML | Acc]);
+make_html2([#ast{type    = ol,
+                 content = Lis} | T], Acc) ->
     HTML = "<ol>\n" ++ make_list_html(Lis, []) ++ "</ol>\n",
-    make_html(T, [HTML | Acc]);
-make_html([#ast{type    = ul,
-                content = Lis} | T], Acc) ->
+    make_html2(T, [HTML | Acc]);
+make_html2([#ast{type    = ul,
+                 content = Lis} | T], Acc) ->
     HTML = "<ul>\n" ++ make_list_html(Lis, []) ++ "</ul>\n",
-    make_html(T, [HTML | Acc]);
-make_html([#ast{type    = {code, none},
-                content = Text} | T], Acc) ->
+    make_html2(T, [HTML | Acc]);
+make_html2([#ast{type    = {code, none},
+                 content = Text} | T], Acc) ->
     HTML = "<pre><code>" ++ Text ++ "</code></pre>",
-    make_html(T, [HTML | Acc]);
-make_html([#ast{type    = {code, Class},
-                content = Text} | T], Acc) ->
+    make_html2(T, [HTML | Acc]);
+make_html2([#ast{type    = {code, Class},
+                 content = Text} | T], Acc) ->
     HTML = "<pre><code class='" ++ Class ++ "'>" ++ Text ++ "</code></pre>",
-    make_html(T, [HTML | Acc]);
-make_html([#ast{type    = tag,
-                content = Text} | T], Acc) ->
-    make_html(T, [Text | Acc]);
-make_html([Text | T], Acc) ->
-    make_html(T, [Text | Acc]).
+    make_html2(T, [HTML | Acc]);
+make_html2([#ast{type    = tag,
+                 content = Text} | T], Acc) ->
+    make_html2(T, [Text | Acc]);
+make_html2([#ast{type    = divv,
+                 content = Text} | T], Acc) ->
+    make_html2(T, [Text | Acc]);
+make_html2([Text | T], Acc) ->
+    io:format("Text is ~p~n", [Text]),
+    make_html2(T, [Text | Acc]).
 
 make_list_html([], Acc) -> lists:reverse(Acc);
 make_list_html([#ast{type    = li,
@@ -245,10 +300,9 @@ p1([{tag, Tag} | T], Acc) ->
                                          content = make_tag_str(Tag)} | Acc])
     end;
 
-p1([{blocktag, [{{{tag, open}, Type}, Tg}] = _Tag} | T], Acc) ->
-    {Block, Rest} = grab_for_blockhtml(T, Type, []),
-    Str = lists:flatten([Tg, "\n" | Block]),
-    p1(Rest, [Str | Acc]);
+p1([{blocktag, [{{{tag, _}, _Type}, Tg}]} | T], Acc) ->
+    p1(T, [#ast{type    = divv,
+                content = Tg ++ "\n"}| Acc]);
 
 %% blank lines/linefeeds are gobbled down and discarded
 p1([{Type, _} | T], Acc)
@@ -256,7 +310,13 @@ p1([{Type, _} | T], Acc)
     Rest = grab_empties(T),
     p1(Rest, Acc);
 
-%% one normal is just normal...
+%% special optional tags present here
+p1([{{normal, {Classnames, Scope}}, P} | T], Acc) ->
+    P2 = string:strip(make_str(snip(P)), both, ?SPACE),
+    p1(T, [#ast{type       = para,
+                content    = P2,
+                classnames = Classnames,
+                scope      = Scope} | Acc]);
 p1([{normal, P} | T], Acc) ->
     P2 = string:strip(make_str(snip(P)), both, ?SPACE),
     p1(T, [#ast{type    = para,
@@ -331,23 +391,6 @@ grab_for_codeblock([H | T], Acc) ->
     Str = make_plain_str(Content),
     grab_for_codeblock(T, [Str | Acc]).
 
-grab_for_blockhtml([], Type, Acc) ->
-    {lists:reverse(["</" ++ Type ++ ">" | Acc]), []};
-grab_for_blockhtml([{blocktag, [{{{tag, close}, Type}, Tg}]}
-                    | T], Type,  Acc) ->
-    {lists:reverse([Tg | Acc]), T};
-grab_for_blockhtml([{blocktag, [{{{tag, _}, GrabType}, Tg}]}
-                    | T], Type,  Acc) when GrabType =/= Type ->
-    %% blocktags grabbed in a blocktag need a line ending pushed
-    grab_for_blockhtml(T, Type, ["\n", Tg | Acc]);
-grab_for_blockhtml([{tag, {{{tag, self_closing}, _Ty}, Tg}}
-                    | T], Type, Acc) ->
-    grab_for_blockhtml(T, Type, [Tg | Acc]);
-grab_for_blockhtml([H | T], Type, Acc) ->
-    {_Type, Content} = H,
-    Str = make_plain_str(Content),
-    grab_for_blockhtml(T, Type, [Str | Acc]).
-
 grab_empties([{linefeed, _} | T]) -> grab_empties(T);
 grab_empties([{blank, _} | T])    -> grab_empties(T);
 grab_empties(List)                -> List.
@@ -383,71 +426,75 @@ ml2(H, List) -> reverse([H | List]).
 %%%   - code blocks
 %%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-type_lines(Lines) ->
-    TypedLines = t_l1(Lines, []),
+type_lines(Lines, OptionalTags) ->
+    TypedLines = t_l1(Lines, OptionalTags, []),
     %% io:format("TypedLines before stripping ~p~n", [TypedLines]),
     strip_lines(TypedLines).
 
-t_l1([], A2) -> reverse(A2);
+t_l1([], _OptionalTags, Acc) -> reverse(Acc);
+
+%% types optional tags
+t_l1([[{colon, _}, {string, _S} | _T] = H | T], OptionalTags, Acc) ->
+    t_l1(T, OptionalTags, [type_options(H, OptionalTags) | Acc]);
 
 %% types atx lines
-t_l1([[{{md, atx}, _} | _T] = H | T], A2) ->
-    t_l1(T, [type_atx(H) | A2]);
+t_l1([[{{md, atx}, _} | _T] = H | T], O, Acc) ->
+    t_l1(T, O, [type_atx(H) | Acc]);
 
 %% types unordered lists lines
 t_l1([[{{ws, _, _}, _}, {{md, star}, _} = ST1,
-       {{ws, _, _}, _} = WS1 | T1] = H | T], A2) ->
-    t_l1(T, [{type_star([ST1, WS1 | T1]), H} | A2]);
-t_l1([[{{md, star}, _}, {{ws, _, _}, _} | _T1] = H | T], A2) ->
-    t_l1(T, [{type_star(H), H} | A2]);
+       {{ws, _, _}, _} = WS1 | T1] = H | T], O, Acc) ->
+    t_l1(T, O, [{type_star([ST1, WS1 | T1]), H} | Acc]);
+t_l1([[{{md, star}, _}, {{ws, _, _}, _} | _T1] = H | T], O, Acc) ->
+    t_l1(T, O, [{type_star(H), H} | Acc]);
 
 %% types ordered lists...
-t_l1([[{{ws, _, _}, _}, {num, _} = N1| T1] | T], A2) ->
-    t_l1(T, [type_ol([N1 | T1]) | A2]);
-t_l1([[{num, _} | _T] = H | T], A2) ->
-    t_l1(T, [type_ol(H) | A2]);
+t_l1([[{{ws, _, _}, _}, {num, _} = N1| T1] | T], O, Acc) ->
+    t_l1(T, O, [type_ol([N1 | T1]) | Acc]);
+t_l1([[{num, _} | _T] = H | T], O, Acc) ->
+    t_l1(T, O, [type_ol(H) | Acc]);
 
 %% Block level tags - these are look ahead they must be
 %% on a single line (ie directly followed by a lf and nothing else
-t_l1([[{{{tag, _Type}, Tag}, _Contents} = H | T1] = List | T], A2) ->
+t_l1([[{{{tag, _Type}, Tag}, _Contents} = H | T1] = List | T], O, Acc) ->
     case is_blank(T1) of
-        false -> t_l1(T, [{normal , List} | A2]);
+        false -> t_l1(T, O, [{normal , List} | Acc]);
         true  -> case is_block_tag(Tag) of
-                     true  -> t_l1(T, [{blocktag , [H]} | A2]);
+                     true  -> t_l1(T, O, [{blocktag , [H]} | Acc]);
                      false ->
                          case is_inline_tag(Tag) of
-                             true  -> t_l1(T, [{tag,    [H | T1]} | A2]);
-                             false -> t_l1(T, [{normal, [H | T1]} | A2])
+                             true  -> t_l1(T, O, [{tag,    [H | T1]} | Acc]);
+                             false -> t_l1(T, O, [{normal, [H | T1]} | Acc])
                          end
                  end
     end;
 
 %% types a blank line or a code block
-t_l1([[{{lf, _}, _}| []]  = H | T], A2) ->
-    t_l1(T, [{linefeed, H} | A2]);
-t_l1([[{{ws, _, _}, _} | _T1] = H | T], A2) ->
-    t_l1(T, [type_ws(H) | A2]);
+t_l1([[{{lf, _}, _}| []]  = H | T], O, Acc) ->
+    t_l1(T, O, [{linefeed, H} | Acc]);
+t_l1([[{{ws, _, _}, _} | _T1] = H | T], O, Acc) ->
+    t_l1(T, O, [type_ws(H) | Acc]);
 
 %% type codeblocks
 t_l1([[{{punc, backtick}, _},
        {{punc, backtick}, _},
        {{punc, backtick}, _},
        {string, Type},
-       {{lf, lf}, _}] = H | T], Acc) ->
-    t_l1(T, [{{codeblock, [{string, Type}]}, H} | Acc]);
+       {{lf, lf}, _}] = H | T], O, Acc) ->
+    t_l1(T, O, [{{codeblock, [{string, Type}]}, H} | Acc]);
 t_l1([[{{punc, backtick}, _},
        {{punc, backtick}, _},
        {{punc, backtick}, _},
-       {{lf, lf}, _}] = H | T], Acc) ->
-    t_l1(T, [{{codeblock, [{string, ""}]}, H} | Acc]);
+       {{lf, lf}, _}] = H | T], O, Acc) ->
+    t_l1(T, O, [{{codeblock, [{string, ""}]}, H} | Acc]);
 t_l1([[{{punc, backtick}, _},
        {{punc, backtick}, _},
-       {{punc, backtick}, _}] = H | T], Acc) ->
-    t_l1(T, [{{codeblock, [{string, ""}]}, H} | Acc]);
+       {{punc, backtick}, _}] = H | T], O, Acc) ->
+    t_l1(T, O, [{{codeblock, [{string, ""}]}, H} | Acc]);
 
 %% Final clause...
-t_l1([H | T], A2) ->
-    t_l1(T, [{normal , H} | A2]).
+t_l1([H | T], O, Acc) ->
+    t_l1(T, O, [{normal , H} | Acc]).
 
 %% strips blanks from the beginning and end
 strip_lines(List) -> reverse(strip_l1(reverse(strip_l1(List)))).
@@ -500,6 +547,29 @@ type_ol1([{{punc, fullstop}, _},
     ol;
 type_ol1(_List, _Acc)                  ->
     normal.
+
+%% we can pass in optional tags and this typer matches them
+%% the format is:
+%% {{"string", "classnames"}, $scope}
+%% where $scope is one of [html | review]
+%%
+%% The idea is that if someone starts a paragraph as `:todo`
+%% we will create a paragraph with the classnames "my classes"
+%% and this will get a special display in the output
+%%
+%% if the $scope is `review` the paragraphs will be filtered out before
+%% production and if it is `html` they will be retained
+type_options([{colon, _}, {string, TagType} | T] = List, OptionalTags) ->
+    case is_optional_tag(string:to_lower(TagType), OptionalTags) of
+        false ->
+            {normal, List};
+        Tag ->
+            {{normal, {Tag#optional_tag.classnames,
+                       Tag#optional_tag.scope}}, T}
+    end.
+
+is_optional_tag(Tag, OptionalTags) ->
+    lists:keyfind(Tag, #optional_tag.tag, OptionalTags).
 
 %% You need to understand what this function is trying to d...
 %% '### blah' is fine
@@ -633,11 +703,12 @@ m_ws1([H | T], Acc) -> m_ws1(T, [H | Acc]).
 l1([], [], A2)             -> flatten(reverse(A2));
 l1([], A1, A2)             -> l1([], [], [l2(A1) | A2]);
 %% these two heads capture opening and closing tags
-l1([$<, $/|T], A1, A2)     -> {Tag, NewT} = closingdiv(T, []),
+l1([$<, $/ | T], A1, A2)   -> {Tag, NewT} = closingdiv(T, []),
                               l1(NewT, [], [Tag, l2(A1) | A2]);
 l1([$< | T], A1, A2)       -> {Tag, NewT} = openingdiv(T),
                               l1(NewT, [], [Tag , l2(A1) | A2]);
 %% these clauses are the normal lexer clauses
+l1([$: | T], A1, A2)       -> l1(T, [], [{colon, ":"},      l2(A1) | A2]);
 l1([$# | T], A1, A2)       -> l1(T, [], [{{md, atx}, "#"},  l2(A1) | A2]);
 l1([$* | T], A1, A2)       -> l1(T, [], [{{md, star}, "*"}, l2(A1) | A2]);
 l1([$_ | T], A1, A2)       -> l1(T, [], [{{md, underscore}, "_"}, l2(A1) | A2]);
@@ -657,11 +728,11 @@ l1([$` | T], A1, A2)       -> l1(T, [], [{{punc, backtick}, "`"}, l2(A1) | A2]);
 %% filling whitespace for cases like '*bob* is great' which needs a non-space filling
 %% whitespace prepended to trigger emphasis so it renders as "<em>bob</em> is great...
 %% that 'character' doesn't exist so isn't in the lexer but appears in the parser
-l1([?SPACE | T], A1, A2)   -> l1(T, [], [{{ws, sp,  1}, " "}, l2(A1) | A2]);
-l1([?TAB | T], A1, A2)     -> l1(T, [], [{{ws, tab, 2}, "\t"}, l2(A1) | A2]);
-l1([?NBSP | T], A1, A2)    -> l1(T, [], [{{ws, sp,  1}, "&nbsp"}, l2(A1) | A2]);
-l1([?CR, ?LF | T], A1, A2) -> l1(T, [], [{{lf, crlf}, [?CR , ?LF]}, l2(A1) | A2]);
-l1([?LF | T], A1, A2)      -> l1(T, [], [{{lf, lf}, [?LF]}, l2(A1) | A2]);
+l1([?SPACE   | T], A1, A2)   -> l1(T, [], [{{ws, sp,  1}, " "}, l2(A1) | A2]);
+l1([?TAB     | T], A1, A2)   -> l1(T, [], [{{ws, tab, 2}, "\t"}, l2(A1) | A2]);
+l1([?NBSP    | T], A1, A2)   -> l1(T, [], [{{ws, sp,  1}, "&nbsp"}, l2(A1) | A2]);
+l1([?CR, ?LF | T], A1, A2)   -> l1(T, [], [{{lf, crlf}, [?CR , ?LF]}, l2(A1) | A2]);
+l1([?LF      | T], A1, A2)   -> l1(T, [], [{{lf, lf}, [?LF]}, l2(A1) | A2]);
 %% l1([?CR | T], A1, A2)      -> l1(T, [], [{{lf, cr}, [?CR]}, l2(A1) | A2]);
 %% this final clause accumulates line fragments
 l1([H|T], A1, A2)          -> l1(T, [H |A1] , A2).
