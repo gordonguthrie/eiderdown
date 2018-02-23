@@ -20,9 +20,19 @@
          to_html_from_file/3,
          to_html_from_file/4,
          to_summary_from_utf8/1,
-         to_summary_from_utf8/2
-         %%         to_reviewable/1,
-         %%         to_reviewable_from_utf8/1
+         to_summary_from_utf8/2,
+         to_reviewable/1,
+         to_reviewable/2,
+         to_reviewable_from_utf8/1,
+         to_reviewable_from_utf8/2
+        ]).
+
+%% utilities exported for use
+-export([
+         ast_to_map/1,
+         optional_tag_to_map/1,
+         map_to_ast/1,
+         map_to_optional_tag/1
         ]).
 
 -import(lists, [flatten/1, reverse/1]).
@@ -37,17 +47,21 @@
 -define(AMP, $&, $a, $m, $p, $;).
 -define(COPY, $&, $c, $o, $p, $y, $;).
 
-
-%% Internal record
--record(ast, {
-          type              :: atom(),
-          content    = []   :: list(),
-          classnames = []   :: string(),
-          scope      = html :: html | preview
-         }).
-
 %% Shared records
 -include("eiderdown.hrl").
+
+to_reviewable(String) ->
+    to_reviewable(String, []).
+
+to_reviewable(String, OptionalTags) ->
+    _AST = get_ast(String, OptionalTags).
+
+to_reviewable_from_utf8(Utf8) ->
+    to_reviewable_from_utf8(Utf8, []).
+
+to_reviewable_from_utf8(Utf8, OptionalTags) ->
+    String = xmerl_ucs:from_utf8(Utf8),
+    _AST = get_ast(String, OptionalTags).
 
 %%% the lexer first lexes the input
 %%% make_lines does 2 passes:
@@ -72,6 +86,11 @@ to_html(String, []) ->
 
 to_html(String, OptionalTags, Scope)  when Scope == html orelse
                                            Scope == review ->
+    AST = get_ast(String, OptionalTags),
+    HTML = make_html(AST, Scope),
+    string:strip(HTML, both, $\n).
+
+get_ast(String, OptionalTags) ->
     %% io:format("String is ~p~n", [String]),
     Lex = lex(String),
     %% io:format("Lex is ~p~n", [Lex]),
@@ -81,8 +100,7 @@ to_html(String, OptionalTags, Scope)  when Scope == html orelse
     %% io:format("TypedLines are ~p~n", [TypedLines]),
     AST = parse(TypedLines),
     %% io:format("in parse AST is ~p~n", [AST]),
-    HTML = make_html(AST, Scope),
-    string:strip(HTML, both, $\n).
+    AST.
 
 -spec to_html_from_utf8(list()) -> list().
 to_html_from_utf8(Utf8) ->
@@ -90,7 +108,6 @@ to_html_from_utf8(Utf8) ->
 
 to_html_from_utf8(Utf8, []) ->
     to_html_from_utf8(Utf8, [], html).
-
 
 to_html_from_utf8(Utf8, OptionalTags, Scope) ->
     Str = xmerl_ucs:from_utf8(Utf8),
@@ -276,15 +293,18 @@ make_list_html([#ast{type    = li,
 
 make_lis(Text) -> "<li>" ++ Text ++ "</li>\n".
 
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%
 %%% Parse the lines
 %%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-parse(TypedLines) -> p1(TypedLines, []).
+parse(TypedLines) -> RawAST = p1(TypedLines, []),
+                     _AST = [add_hash(X) || X <- RawAST].
 
+add_hash(#ast{content = C} = AST) -> AST#ast{hash = make_hash(C)}.
+
+make_hash(Term) -> crypto:hash(md5, term_to_binary(Term)).
 
 %% Terminal clause
 p1([], Acc)    -> reverse(Acc);
@@ -363,13 +383,16 @@ p1([{Type, _} | _T] = List, Acc) when Type == ul orelse
 p1([{{codeblock, P1}, S1}, {{codeblock, P2}, S2} | T], Acc) ->
     p1([{{codeblock, merge(P1, P2)}, S1 ++ S2} | T], Acc);
 p1([{{codeblock, P}, _} | T], Acc) ->
-    Type = case P of
-               [{string, ""}]    -> {code, none};
-               [{string, Class}] -> {code, Class}
+    {Type, Classes}
+        = case P of
+              [{string, ""}]    -> {{code, none}, ""};
+              [{string, Class}] -> {{code, Class}, "code " ++ Class}
+
            end,
     {Content, Rest} = grab_for_codeblock(T, []),
-    AST = #ast{type    = Type,
-               content = Content},
+    AST = #ast{type       = Type,
+               content    = Content,
+               classnames = Classes},
     p1(Rest, [AST | Acc]).
 
 grab_list_items([], _Type, Acc) ->
