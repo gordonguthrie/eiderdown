@@ -386,7 +386,7 @@ p1([{{codeblock, P}, _} | T], Acc) ->
     {Type, Classes}
         = case P of
               [{string, ""}]    -> {{code, none}, ""};
-              [{string, Class}] -> {{code, Class}, "code " ++ Class}
+              [{string, Class}] -> {{code, Class}, "eiderdown-code " ++ Class}
 
            end,
     {Content, Rest} = grab_for_codeblock(T, []),
