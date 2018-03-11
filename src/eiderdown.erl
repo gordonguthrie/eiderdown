@@ -734,7 +734,6 @@ l1([$< | T], A1, A2)       -> {Tag, NewT} = openingdiv(T),
 l1([$: | T], A1, A2)       -> l1(T, [], [{colon, ":"},      l2(A1) | A2]);
 l1([$# | T], A1, A2)       -> l1(T, [], [{{md, atx}, "#"},  l2(A1) | A2]);
 l1([$* | T], A1, A2)       -> l1(T, [], [{{md, star}, "*"}, l2(A1) | A2]);
-l1([$_ | T], A1, A2)       -> l1(T, [], [{{md, underscore}, "_"}, l2(A1) | A2]);
 l1([$1 | T], A1, A2)       -> l1(T, [], [{num, "1"}, l2(A1) | A2]);
 l1([$2 | T], A1, A2)       -> l1(T, [], [{num, "2"}, l2(A1) | A2]);
 l1([$3 | T], A1, A2)       -> l1(T, [], [{num, "3"}, l2(A1) | A2]);
@@ -926,20 +925,6 @@ htmlchars1([$*, $* | T], A)          -> {T2, NewA} = strong(T, $*),
 %% likewise for strong
 htmlchars1([$\\, $* | T], A)         -> htmlchars1(T, [$* | A]);
 htmlchars1([$* | T], A)              -> {T2, NewA} = emphasis(T, $*),
-                                        htmlchars1(T2, [NewA | A]);
-%% and again for underscores
-htmlchars1([$\\, $_, $_, $_ | T], A) -> htmlchars1(T, [$_, $_, $_ | A]);
-%% the none atom is the non-space filling whitespace
-htmlchars1([$_, $_, $_ | T], A)      -> {T2, NewA} = superstrong(T, $_),
-                                        htmlchars1(T2, [NewA | A]);
-%% and strong
-%% and again for underscores
-htmlchars1([$\\, $_, $_ | T], A)     -> htmlchars1(T, [$_, $_ | A]);
-htmlchars1([$_, $_ | T], A)          -> {T2, NewA} = strong(T, $_),
-                                        htmlchars1(T2, [NewA | A]);
-%% likewise for strong
-htmlchars1([$\\, $_ | T], A)         -> htmlchars1(T, [$_ | A]);
-htmlchars1([$_ | T], A)              -> {T2, NewA} = emphasis(T, $_),
                                         htmlchars1(T2, [NewA | A]);
 %% handle backtick escaping
 htmlchars1([$\\, $` | T], A)         -> htmlchars1(T, [$` | A]);

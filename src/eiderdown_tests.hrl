@@ -212,27 +212,14 @@ unit_test_() ->
                    to_html("Now is the winter of `our discontent` made glorious summer "
                         "by this Son of York")),
      ?_assertEqual("<p><code>&lt;div&gt;blah&lt;/div&gt;</code></p>", to_html("`<div>blah</div>`")),
-     ?_assertEqual("<p><em>_</em>blah</p>\n<p>a</p>", to_html("___blah\na")),
      ?_assertEqual("<p><em>*</em>blah</p>\n<p>a</p>", to_html("***blah\na")),
-     ?_assertEqual("<p><strong><em>you</em></strong> sad bastard</p>\n<p>a</p>",
-                   to_html("___you___ sad bastard\na")),
-     ?_assertEqual("<p><strong>you</strong> sad bastard</p>\n<p>a</p>",
-                   to_html("__you__ sad bastard\na")),
-     ?_assertEqual("<p><em>you</em> sad bastard</p>\n<p>a</p>", to_html("_you_ sad bastard\na")),
      ?_assertEqual("<p><strong><em>you</em></strong> sad bastard</p>\n<p>a</p>",
                    to_html("***you*** sad bastard\na")),
      ?_assertEqual("<p><strong>you</strong> sad bastard</p>\n<p>a</p>",
                    to_html("**you** sad bastard\na")),
      ?_assertEqual("<p><em>you</em> sad bastard</p>\n<p>a</p>", to_html("*you* sad bastard\na")),
-     ?_assertEqual("<p>you _sad_ bastard</p>\n<p>a</p>", to_html("you \\_sad\\_ bastard\na")),
      ?_assertEqual("<p>you *sad* bastard</p>\n<p>a</p>", to_html("you \\*sad\\* bastard\na")),
-     ?_assertEqual("<p>you<em>sad</em>bastard</p>\n<p>a</p>", to_html("you_sad_bastard\na")),
      ?_assertEqual("<p>you<em>sad</em>bastard</p>\n<p>a</p>", to_html("you*sad*bastard\na")),
-     ?_assertEqual("<p>you <strong><em>sad</em></strong> bastard</p>\n<p>a</p>",
-                   to_html("you ___sad___ bastard\na")),
-     ?_assertEqual("<p>you <strong>sad</strong> bastard</p>\n<p>a</p>",
-                   to_html("you __sad__ bastard\na")),
-     ?_assertEqual("<p>you <em>sad</em> bastard</p>\n<p>a</p>", to_html("you _sad_ bastard\na")),
      ?_assertEqual("<p>you <strong><em>sad</em></strong> bastard</p>\n<p>a</p>",
                    to_html("you ***sad*** bastard\na")),
      ?_assertEqual("<p>you <strong>sad</strong> bastard</p>\n<p>a</p>",
@@ -242,6 +229,10 @@ unit_test_() ->
      ?_assertEqual("<pre><code>erk</code></pre>", to_html("```\nerk")),
      ?_assertEqual("<pre><code>first\n    second\n</code></pre>",
                    to_html("```\nfirst\n    second\n```")),
+
+     %% check that underscores are now no longer useful
+     ?_assertEqual("<p>bish_bash _bosh_ yeah</p>",
+                   to_html("bish_bash _bosh_ yeah")),
 
      %% basic lists
 
