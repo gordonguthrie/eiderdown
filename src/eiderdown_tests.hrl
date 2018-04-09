@@ -425,22 +425,22 @@ unit_test_() ->
      %% Start testing optional tags
      %%
 
-      ?_assertEqual("<p>:comment fish</p>\n"
+      ?_assertEqual("<p>comment: fish</p>\n"
                    "<p>rando</p>",
-                   to_html(":comment fish\nrando", [])),
+                   to_html("comment: fish\nrando", [])),
 
      ?_assertEqual("<p class='my classes'>fish</p>\n"
                    "<p>rando</p>",
-                   to_html(":quote fish\nrando", ?OPTS, html)),
+                   to_html("quote: fish\nrando", ?OPTS, html)),
 
-     ?_assertEqual("<p>:belch fish</p>\n<p>rando</p>",
-                   to_html(":belch fish\nrando", ?OPTS, html)),
+     ?_assertEqual("<p>belch: fish</p>\n<p>rando</p>",
+                   to_html("belch: fish\nrando", ?OPTS, html)),
 
      ?_assertEqual("<p>rando</p>",
-                   to_html(":todo fish\nrando", ?OPTS, html)),
+                   to_html("todo: fish\nrando", ?OPTS, html)),
 
      ?_assertEqual("<p class='more classes'>fish</p>\n"
                    "<p>rando</p>",
-                   to_html(":todo fish\nrando", ?OPTS, review))
+                   to_html("todo: fish\nrando", ?OPTS, review))
 
     ].

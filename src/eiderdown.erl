@@ -457,7 +457,7 @@ type_lines(Lines, OptionalTags) ->
 t_l1([], _OptionalTags, Acc) -> reverse(Acc);
 
 %% types optional tags
-t_l1([[{colon, _}, {string, _S} | _T] = H | T], OptionalTags, Acc) ->
+t_l1([[{string, _S}, {colon, _} | _T] = H | T], OptionalTags, Acc) ->
     t_l1(T, OptionalTags, [type_options(H, OptionalTags) | Acc]);
 
 %% types atx lines
@@ -582,7 +582,7 @@ type_ol1(_List, _Acc)                  ->
 %%
 %% if the $scope is `review` the paragraphs will be filtered out before
 %% production and if it is `html` they will be retained
-type_options([{colon, _}, {string, TagType} | T] = List, OptionalTags) ->
+type_options([{string, TagType}, {colon, _} | T] = List, OptionalTags) ->
     case is_optional_tag(string:to_lower(TagType), OptionalTags) of
         false ->
             {normal, List};
