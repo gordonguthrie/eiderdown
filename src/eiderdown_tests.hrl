@@ -441,6 +441,10 @@ unit_test_() ->
 
      ?_assertEqual("<p class='more classes'>fish</p>\n"
                    "<p>rando</p>",
-                   to_html("todo: fish\nrando", ?OPTS, review))
+                   to_html("todo: fish\nrando", ?OPTS, review)),
+
+     %% regression
+     ?_assertEqual("<p>hey <code><span></code> ho</p>",
+                   to_html("hey `<span>` ho", ?OPTS, review))
 
     ].
